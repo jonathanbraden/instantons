@@ -5,8 +5,8 @@
 ! Compile with
 !  gfortran -fdefault-real-8 -fdefault-double-8 -O3 -xhost -o instanton instanton.f90 -llapack -lm
 !
-!#define QUADRATIC 1
-#define LINEAR 1
+#define QUADRATIC 1
+!#define LINEAR 1
 
 #define XLOOP do i=0,nx
 #define ENDXLOOP enddo
@@ -41,11 +41,11 @@ program instanton
 
   real :: delta
   integer, parameter :: numdelta = 1
-  real, parameter, dimension(numdelta) :: deltavals = (/ 0.2 /)
+  real, parameter, dimension(numdelta) :: deltavals = (/ 0.001 /)
   integer :: m
   real :: phifalse
   real, parameter :: phiout = 1.
-  real :: rinit, len
+  real :: rinit, len, deltarho
   real,dimension(XRANGE) :: map_p, map_pp
 
   integer :: i,j,l
@@ -57,25 +57,29 @@ program instanton
   delta = deltavals(1)
 
 #ifdef QUADRATIC
-  phit=0.
+  phit=10.*twopi
   call get_vacuum(phit)
   phif = phit+twopi
   call get_vacuum(phif)
-  rinit = 24./pi/delta/(phif**2-phit**2)
+  deltarho = cos(phit) - cos(phif) + 0.5*delta*(phif**2-phit**2)
 #endif
 #ifdef LINEAR
   phit=asin(-delta)
   call get_vacuum(phit)
   phif=phit + twopi
   call get_vacuum(phif)
-  rinit = 12./pi/delta
+  deltarho = twopi*delta
 #endif
+  rinit = 24./deltarho
   len = 1.6*rinit
+!  len = 3.**0.5*rinit
+
+  print*,"Thin wall radius is ",rinit
 
   call get_collocation_points(xgrid, wgrid, nmax)
   call get_basis_matrix(b, bp, bpp)
   call transform_to_evens(xgrid)
-  call cluster_points(xgrid,0.25,.true.)
+  call cluster_points(xgrid,0.2,.true.)
 !  call transform_double_infinite(xgrid,((1.-0.5**2)**0.5/0.5)*rinit)
   call transform_double_infinite(xgrid,len)
   call make_transform_matrix()
