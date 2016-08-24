@@ -651,7 +651,7 @@ contains
   subroutine evalbasis(x, b, ncoeff)
     integer, intent(in) :: ncoeff
     real, intent(in) :: x
-    real, intent(out), dimension(3,ncoeff) :: b
+    real, intent(out), dimension(3,0:ncoeff) :: b
 
     call chebychev(ncoeff, x, b(1,:), b(2,:), b(3,:))
   end subroutine evalbasis
