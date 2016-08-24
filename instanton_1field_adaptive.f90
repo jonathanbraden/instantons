@@ -538,7 +538,7 @@ contains
 
     fspec = matmul(mmt,freal)
     do i=1,ngrid
-       xtmp = dx*(i-1)
+       xtmp(1) = dx*(i-1)
        call evalf(xtmp,fspec(:),ftmp)
        f(i) = ftmp(1)
        fp(i) = ftmp(2)
@@ -608,7 +608,7 @@ contains
   subroutine evalbasis(x, b, ncoeff)
     integer, intent(in) :: ncoeff
     real, intent(in) :: x
-    real, intent(out), dimension(3,ncoeff) :: b
+    real, intent(out), dimension(3,0:ncoeff) :: b
 
     call chebychev(ncoeff, x, b(1,:), b(2,:), b(3,:))
   end subroutine evalbasis
