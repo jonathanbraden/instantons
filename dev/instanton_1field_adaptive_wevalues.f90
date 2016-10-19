@@ -6,9 +6,6 @@
 !  gfortran -fdefault-real-8 -fdefault-double-8 -O3 -xhost -o instanton instanton.f90 -llapack -lm
 !
 
-#define CUBIC 1
-!#define LINEAR 1
-
 #define XLOOP do i=0,nx
 #define ENDXLOOP enddo
 #define XRANGE 0:nx
@@ -42,32 +39,28 @@ program instanton
 
   real :: delta
   integer, parameter :: numdelta = 1
-  real, parameter, dimension(numdelta) :: deltavals = (/ 0.99 /)
+
+  real, parameter, dimension(numdelta) :: deltavals = (/ 4. /)
   integer :: m
   real :: phifalse
-  real, parameter :: phiout = 1.
+  real, parameter :: phiout = pi
   real :: rinit, len
   real,dimension(XRANGE) :: map_p, map_pp
 
   integer :: i,j,l
-  real :: lambda = 1.e-3
+  real :: lambda = 1.e-3 ! what does this control?
 
   real :: width,wback
   real :: phif, phit
 
-#ifdef CUBIC
-  rinit =  1.5*2.**0.5/deltavals(1)
-  phif=-1.
-  phit=1.
-#endif
-#ifdef LINEAR
-  rinit = 2.**0.5/deltavals(1)
-  phif=-1.
-  phit=1.
-#endif
-  len = 10.
+  ! Fix this one
+  rinit =  3.*2.**0.5*deltavals(1)**0.5
+  phif=0.
+  phit=pi
+  
+!  len = 10.
 !  len=1.6*rinit
-!  len = rinit *3.**0.5
+  len = rinit *3.**0.5
   print*,"length is ",len
 
   delta = deltavals(1)
@@ -115,7 +108,7 @@ program instanton
   endif
 
   call output()
-  call output_resampled_1d(1024,2.**0.5*13.*10./1024.)
+!  call output_resampled_1d(1024,2.**0.5*13.*10./1024.)
 !  call output_resampled_1d(512.,2.**0.5*13.*10./512.)
 !  call output_resampled()
   call get_evalues()
@@ -156,24 +149,14 @@ contains
     real :: vprime
     real, intent(in) :: phi
 
-#ifdef CUBIC
-    vprime =  (phi+delta)*(phi**2 - 1.)
-#endif
-#ifdef LINEAR
-    vprime = phi*(phi**2-1.) - delta
-#endif
+    vprime =  -sin(phi) + delta*sin(2.*phi)
   end function vprime
 
   elemental function vdprime(phi)
     real :: vdprime
     real, intent(in) :: phi
 
-#ifdef CUBIC
-    vdprime =  3.*phi**2 - 1. + 2.*delta*phi
-#endif
-#ifdef LINEAR
-    vdprime = 3.*phi**2 - 1.
-#endif
+    vdprime =  -cos(phi) + 2.*delta*cos(2.*phi)
   end function vdprime
 
   subroutine output_debug(init)
@@ -652,6 +635,7 @@ contains
     integer, intent(in) :: ncoeff
     real, intent(in) :: x
     real, intent(out), dimension(3,0:ncoeff) :: b
+!    real, intent(out), dimension(3,ncoeff) :: b
 
     call chebychev(ncoeff, x, b(1,:), b(2,:), b(3,:))
   end subroutine evalbasis
