@@ -19,7 +19,7 @@ program instanton
 
 ! Number of fields, basis functions and collocation points
   integer, parameter :: nfield=1
-  integer, parameter :: nmax = 400 ! order of highest interpolating polynomial
+  integer, parameter :: nmax = 90 ! order of highest interpolating polynomial
   integer, parameter :: nx = nmax,  nbasis=nx
   integer, parameter :: fsize = nx+1  ! needed for DGESV
 
@@ -39,6 +39,7 @@ program instanton
 
   real :: delta
   integer, parameter :: numdelta = 1
+
   real, parameter, dimension(numdelta) :: deltavals = (/ 4. /)
   integer :: m
   real :: phifalse
@@ -713,7 +714,8 @@ contains
   subroutine evalbasis(x, b, ncoeff)
     integer, intent(in) :: ncoeff
     real, intent(in) :: x
-    real, intent(out), dimension(3,ncoeff) :: b
+    real, intent(out), dimension(3,0:ncoeff) :: b
+!    real, intent(out), dimension(3,ncoeff) :: b
 
     call chebychev(ncoeff, x, b(1,:), b(2,:), b(3,:))
   end subroutine evalbasis
