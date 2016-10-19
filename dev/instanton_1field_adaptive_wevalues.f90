@@ -19,7 +19,7 @@ program instanton
 
 ! Number of fields, basis functions and collocation points
   integer, parameter :: nfield=1
-  integer, parameter :: nmax = 200 ! order of highest interpolating polynomial
+  integer, parameter :: nmax = 400 ! order of highest interpolating polynomial
   integer, parameter :: nx = nmax,  nbasis=nx
   integer, parameter :: fsize = nx+1  ! needed for DGESV
 
@@ -111,7 +111,10 @@ program instanton
 !  call output_resampled_1d(512.,2.**0.5*13.*10./512.)
 !  call output_resampled()
   call get_evalues()
-
+  call get_evectors()
+  
+!  call get_action()
+  
 contains
 
 ! Initial guess for the fields
@@ -143,7 +146,14 @@ contains
   end subroutine get_vacuum
 !
 ! Define the model through it's potential
-!
+  !
+  elemental function potential(phi)
+    real :: potential
+    real, intent(in) :: phi
+
+    potential = cos(phi) + delta*sin(phi)**2 + 1.
+  end function potential
+  
   elemental function vprime(phi)
     real :: vprime
     real, intent(in) :: phi
@@ -314,14 +324,84 @@ contains
        print*,"Error in eigenvalue solution"
        stop
     endif
-! Print out 10 smallest eigenvalues
+
+    ! Print out 10 smallest eigenvalues
     do i=1,10
        imax = minloc(evalreal)
        print*,evalreal(imax(1)), evalimag(imax(1))
        evalreal(imax(1))=1000000.
     enddo
+
+    do i=1,10
+       imax = maxloc(evalimag)
+       print*,evalreal(imax(1)), evalimag(imax(1))
+       evalimag(imax(1)) = -1.
+    enddo
   end subroutine get_evalues
 
+  subroutine get_evectors()
+    real, dimension(1:fsize,1:fsize) :: L
+    real, dimension(1:fsize) :: evalreal, evalimag
+!    real, dimension(1:fsize) :: evecl, evecr
+    integer :: asize
+    integer :: ierror
+    real :: dummy(1:1)
+    real :: evec(1:fsize,1:fsize)
+    real, allocatable, dimension(:) :: work
+    integer :: iwork, i, imax(1), j
+
+    asize = fsize ! (or nx or something)
+    ! Allocate workspace
+    call DGEEV('N','V',asize,L,asize, evalreal, evalimag, dummy,1,evec,fsize,dummy,-1,ierror)
+    if (ierror.eq.0) then
+       iwork = int(dummy(1))
+       allocate(work(1:iwork))
+    else
+       print*,"Error allocating workspace for eigenvalue problem, exiting"
+       stop
+    endif
+
+! Fill second variation of action
+    L(1:fsize,1:fsize) = -l0(XRANGE,BRANGE)
+    do i=1,fsize
+       L(i,i) = L(i,i) + vdprime(freal(i-1))
+    enddo
+
+! Get eigenvalues
+    call DGEEV('N','V',asize,L,asize,evalreal, evalimag, dummy,1,evec,fsize,work,iwork,ierror)
+    if (ierror /= 0) then
+       print*,"Error in eigenvalue solution"
+       stop
+    endif
+
+    ! Print out 10 smallest eigenvalues
+    open(unit=80,file="eigenvectors.dat")
+    do i=1,10
+       imax = minloc(evalreal)
+       print*,evalreal(imax(1)), evalimag(imax(1))
+       evalreal(imax(1))=1000000.
+       do j=1,fsize
+          write(80,*) evec(j,imax(1))
+       enddo
+       write(80,*)
+    enddo
+  end subroutine get_evectors
+  
+  subroutine get_action()
+    real, dimension(XRANGE) :: dfsq, pot, lag
+    real :: action
+    integer, parameter :: ndim = 3
+    real, parameter :: sphere_surface = 2.*pi**2 ! adjust for dimension
+    dfsq = matmul(bp,fspec)
+    dfsq = 0.5*dfsq**2
+    lag = dfsq + potential(freal) ! Euclidean Lagrangian
+    
+    action = sum(wgrid*lag*xgrid**ndim) ! Modify to allow arbitrary dimensions
+    action = sphere_surface * action
+    print*,"action is ",action
+!    print*,dfsq
+  end subroutine get_action
+  
   ! Initial guess for the field profile
   ! Use the thin-wall solution, or else previously computed profile for different adjustable model parameter
   elemental function profile(x)
