@@ -66,46 +66,80 @@ contains
        call chebyshev_gauss_nodes(this%xGrid,this%weights,this%ord)
     endif
     
-    this%norm = 0.5_dl*twopi
+    this%norm = pi
     this%norm(0) = 0.5_dl*this%norm(0)
-    ! Evaluate basis functions.  The if statement has been pulled out of the loop for speed
-    ! Unfortunately, this leads to significant code duplication
-    if (num_inv) then
-       do i=0,ord
-          x = this%xGrid(i)
-          call evaluate_chebyshev(ord,x,BVals,nd)
-!          call evaluate_chebyshev_trig(ord,x,BVals,nd)
-          this%invTrans(i,:) = BVals(:,0)
-          this%derivs(i,:,1:nd) = BVals(:,1:nd)
-       enddo
-       ! Add a numerical matrix inversion in here to get fTrans
-    else
-       do i=0,ord
-          x = this%xGrid(i)
+    
+    ! Evaluate the basis functions on the collocation grid
+    do i=0,ord
+       x = this%xGrid(i)
 !          call evaluate_chebyshev(ord,x,BVals,nd)
-          call evaluate_chebyshev_trig(ord,x,BVals,nd)
-          this%invTrans(i,:) = BVals(:,0)
-          this%derivs(i,:,1:nd) = BVals(:,1:nd)
-          !this%fTrans(:,i) = this%weights(i)*BVals(:,0) !/ this%norm(:)
-       enddo
+       call evaluate_chebyshev_trig(ord,x,BVals,nd)
+       this%invTrans(i,:) = BVals(:,0)
+       this%derivs(i,:,1:nd) = BVals(:,1:nd)
+       !this%fTrans(:,i) = this%weights(i)*BVals(:,0) !/ this%norm(:)
+    enddo
+
+    if (num_inv) then
+       ! Fill in code to numerically invert the inverse transform
+    else
        do i=0,ord
           this%fTrans(:,i) = this%weights(:)*this%invTrans(:,i)
        enddo
        this%fTrans(:,0) = 0.5_dl*this%fTrans(:,0)
        this%fTrans = transpose(this%fTrans)
+       if (end) this%fTrans(ord,:) = 0.5_dl*this%fTrans(ord,:)
+       ! For the Lobatto grid, this needs to be modified due to the incorrect normalisation of the highest mode on this grid.  Check this carefully with Legendre etc.
     endif
 
-    ! For debugging purposes, in here it's useful to make sure that the forward and inverse transforms are inverses of each other
-
-    ! Check if I need a temporary matrix in here when using BLAS.  Replace with BLAS call
-    ! Now convert derivatives to correct space.
-    !>@todo: Rather than doing a numerical matrix multiplication here, use explicit formulas in the above loop
+    !>@todo
+    !> Rather than doing a numerical matrix multiplication here, use explicit formulas in the above loop
+    !> Add DGEMM support
     do i=1,nd
        !call DGEMM
-!       this%derivs(:,:,i) = matmul(this%derivs(:,:,i),this%fTrans(:,:))
+       this%derivs(:,:,i) = matmul(this%derivs(:,:,i),this%fTrans(:,:))
     enddo
   end subroutine create_chebyshev
 
+  !>@todo
+  !> Helper routine to evaluate the basis functions and derivatives on the collocation grid
+  subroutine eval_basis_functions(this,ord,nd,recur)
+    type(Chebyshev), intent(inout) :: this
+    integer, intent(in) :: nd, ord
+    logical, intent(in) :: recur
+    integer :: i
+    real(dl) :: x, BVals(0:ord,0:nd)
+    
+    do i=0,ord
+       x = this%xGrid(i)
+       if (recur) then
+          call evaluate_chebyshev(ord,x,BVals,nd)
+       else
+          call evaluate_chebyshev_trig(ord,x,BVals,nd)
+       endif
+       this%invTrans(i,:) = BVals(:,0)
+       this%derivs(i,:,1:nd) = BVals(:,1:nd)
+       !this%fTrans(:,i) = this%weights(i)*BVals(:,0) !/ this%norm(:)
+    enddo
+  end subroutine eval_basis_functions
+
+  !>@todo
+  !> Create the Matrix Multiplication Transform from real to spectral space
+  subroutine make_mmt(this,num_inv)
+    type(Chebyshev), intent(inout) :: this
+    logical, intent(in) :: num_inv
+    integer :: i, ord
+    
+    if (num_inv) then
+       ! Fill in code to numerically invert the inverse transform
+    else
+       do i=0,ord
+          this%fTrans(:,i) = this%weights(:)*this%invTrans(:,i)
+       enddo
+       this%fTrans(:,0) = 0.5_dl*this%fTrans(:,0)
+       this%fTrans = transpose(this%fTrans)
+    endif    
+  end subroutine make_mmt
+  
   !>@brief
   !> Free the memory stored in the input Chebyshev object
   subroutine destroy_chebyshev(this)
@@ -134,7 +168,7 @@ contains
   !>@brief
   !> Create the nth derivative operator by repeated application of the first derivative
   !>
-  !> WARNING: this must already have been initialised for this to work
+  !> WARNING: the first derivative must already have been initialised for this to work
   subroutine generate_nth_derivative_matrix(this,nd,d_dx,dn_dx)
     type(Chebyshev), intent(in) :: this
     integer, intent(in) :: nd
@@ -226,6 +260,7 @@ contains
   !>
   !>@todo
   !> Finish writing this, allow for Lobatto endpoints
+  !> Add appropriate control flow to allow nd to be specified
   subroutine evaluate_chebyshev_trig(ord,x,T,nd)
     integer, intent(in) :: ord, nd
     real(dl), intent(in) :: x
@@ -238,7 +273,7 @@ contains
     iVals = (/ (i, i=0,ord) /)
     T(:,0) = cos(iVals*icn)
     T(:,1) = dble(iVals) * sin(dble(iVals)*icn) * dn
-    T(:,2) = cos(iVals*icn) * dble(iVals**2) * dn**2 + sin(iVals*icn) * iVals * dn**3 * x
+    T(:,2) = -cos(iVals*icn) * dble(iVals**2) * dn**2 + sin(iVals*icn) * iVals * dn**3 * x
   end subroutine evaluate_chebyshev_trig
 
   !>@brief
@@ -251,7 +286,7 @@ contains
     ! Add error check to make sure xNew and fNew are the same size
     n = size(xNew)
     do i=1,n
-       fNew(i) = 0._dl  ! use evaluate_chebyshev
+!       fNew(i) =   ! use evaluate_chebyshev
     enddo
   end subroutine interpolate
 
@@ -281,6 +316,7 @@ contains
     dkcol = pi  / dble(order)
     do i=0,order
        x(i) = -dcos(dble(i)*dkcol)
+!       print*,"Lobatto node is ",x(i),cos(dble(order)*acos(x(i)))
     enddo
     w = 2._dl / dble(order)
     w(0) = 1._dl / dble(order); w(order) = 1._dl / dble(order)
@@ -334,4 +370,6 @@ contains
     enddo
   end subroutine make_backward_transform
 
+! Add in mapping subroutines here
+  
 end module Cheby
