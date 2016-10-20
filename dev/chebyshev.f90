@@ -17,6 +17,7 @@
 !>@todo
 !> Add nice description of what this module is doing for the purposes of documentation
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 module Cheby
   use, intrinsic :: iso_c_binding
 #ifdef USEOMP
@@ -64,7 +65,7 @@ contains
     else
        call chebyshev_gauss_nodes(this%xGrid,this%weights,this%ord)
     endif
-
+    
     this%norm = 0.5_dl*twopi
     this%norm(0) = 0.5_dl*this%norm(0)
     ! Evaluate basis functions.  The if statement has been pulled out of the loop for speed
@@ -76,18 +77,20 @@ contains
           this%invTrans(i,:) = BVals(:,0)
           this%derivs(i,:,1:nd) = BVals(:,1:nd)
        enddo
-       ! Add a numerical matrix inversion in here
+       ! Add a numerical matrix inversion in here to get fTrans
     else
        do i=0,ord
           x = this%xGrid(i)
           call evaluate_chebyshev(ord,x,BVals,nd)
           this%invTrans(i,:) = BVals(:,0)
           this%derivs(i,:,1:nd) = BVals(:,1:nd)
-!          this%fTrans(,) = this%weights(i)*BVals(:,0) / this%norm(:)  ! replace this line by a numerical matrix inversion if desired
+          !this%fTrans(:,i) = this%weights(i)*BVals(:,0) !/ this%norm(:)
        enddo
        do i=0,ord
-          
+          this%fTrans(:,i) = this%weights(:)*this%invTrans(:,i)
        enddo
+       this%fTrans(:,0) = 0.5_dl*this%fTrans(:,0)
+       this%fTrans = transpose(this%fTrans)
     endif
 
     ! For debugging purposes, in here it's useful to make sure that the forward and inverse transforms are inverses of each other
@@ -97,7 +100,7 @@ contains
     !>@todo: Rather than doing a numerical matrix multiplication here, use explicit formulas in the above loop
     do i=1,nd
        !call DGEMM
-       this%derivs(:,:,i) = matmul(this%derivs(:,:,i),this%invTrans(:,:))
+       this%derivs(:,:,i) = matmul(this%derivs(:,:,i),this%fTrans(:,:))
     enddo
   end subroutine create_chebyshev
 
@@ -171,13 +174,50 @@ contains
        T(i,2) = 2._dl*x*T(i-1,2) - T(i-2,2) + 4._dl*T(i-1,1)
     enddo
   end subroutine evaluate_chebyshev
-  
-  ! Write this
-  ! Evaluate Chebyshev polynomials using trigonometric representation
+
+  !@brief
+  !> Evaluate Chebyshev's using the recurrence relation for the individual polynomials
+  !> \f[ B_n(x) = 2xB_{n-1}(x) - B_{n-2}(x)\f]
+  !> and the derivative recurrence for all derivatives
+  !> \f[ 2B_n(x) = \frac{1}{n+1}B'_{n+1}(x) - \frac{1}{n-1}B'_{n-1}(x)\f]
+  !>
+  !>@todo
+  !> Finish writing this thing
+  subroutine evaluate_chebyshev_recur(ord,x,T,nd)
+    integer, intent(in) :: ord
+    real(dl), intent(in) :: x, nd
+    real(dl), intent(out) :: T(0:ord,0:2)
+    integer :: i
+
+    T(0,0) = 1._dl; T(1,0) = x
+    T(0,1:) = 0._dl; T(1,1) = 1._dl
+    T(1,2:) = 0._dl
+    T(2,0) = 2._dl*x*T(1,0) - T(0,0)
+    do i=3,ord
+       T(i,0) = 2._dl*x*T(i-1,0) - T(i-2,0)
+       T(i,1) = 0._dl
+    enddo
+  end subroutine evaluate_chebyshev_recur
+    
+
+
+  !>@brief
+  !> Evaluate Chebyshev polynomials using trigonometric representation
+  !>
+  !> The Chebyshev polynomials at grid point x are evaluated using
+  !> \f[ B_n(x) = \cos\left(n\cos^{-1}(x)\right) \f]
+  !> and the corresponding derivatives
+  !>
+  !>@todo
+  !> Finish writing this
   subroutine evaluate_chebyshev_trig(ord,x,T,nd)
     integer, intent(in) :: ord, nd
     real(dl), intent(in) :: x
     real(dl), intent(out) :: T(0:ord,0:nd)
+    real(dl) :: ci
+
+    ci = acos(x)
+    
   end subroutine evaluate_chebyshev_trig
 
   !>@brief
@@ -198,7 +238,7 @@ contains
 ! These are all fucked up from the point of view of actually doing quadrature.
 ! There are missing factors due to the normalisation of the Chebyshevs
   subroutine chebyshev_gauss_nodes(x,w,order)
-    real(dl), dimension(:), intent(out) :: x,w
+    real(dl), dimension(0:order), intent(out) :: x,w
     integer, intent(in) :: order
     real*8 :: dkcol
     integer :: i

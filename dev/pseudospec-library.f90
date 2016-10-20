@@ -16,38 +16,46 @@ module PSpec
   use omp_lib
 #endif
   use constants
+  use Cheby
   implicit none
 
   type TransformSpec1D
      integer :: nx, ord
      real(C_DOUBLE), allocatable :: realSpace(:)
      real(C_DOUBLE), allocatable :: specSpace(:)
-     real(C_DOUBLE), allocatable :: fTrans(:,:)
-     real(C_DOUBLE), allocatable :: invTrans(:,:)
-     real(C_DOUBLE), allocatable :: derivs(:,:,:)
+     type(Chebyshev) :: transform
   end type TransformSpec1D
 
 contains
   
-  subroutine initialize_transform_1d(this, n, nd)
+  subroutine initialize_transform_1d(this, ord, nd)
     type(TransformSpec1D), intent(out) :: this
-    integer, intent(in) :: n, nd
+    integer, intent(in) :: ord, nd
 
-    this%nx = n; this%ord=n-1
+    this%nx = nx+1; this%ord=ord
     allocate( realSpace(1:nx),specSpace(0:ord) )
     ! Now initialize the transforms, etc.
-    allocate( fTrans(1:n,1:n) )
-    allocate( invTrans(1:n,1:n) )
-    allocate( derivs(1:n,1:n,1:nd) )
+    call create_chebyshev(this%transform,ord,nd,.false.,.false.)
   end subroutine initialize_transform_1d
 
   subroutine destroy_transform_1d(this)
     type(TransformPair1D), intent(inout) :: this
 
     this%nx = -1; this%ord = -1
-    deallocate(realSpace,specSpace,fTrans,invTrans,derivs)
+    deallocate(realSpace,specSpace)
+    call destroy_chebyshev(this%transform)
   end subroutine destroy_transform_1d
 
+  subroutine derivative(this)
+    type(TransformPair1D), intent(inout) :: this
+    
+  end subroutine derivative
+
+  subroutine laplacian(this)
+    type(TransformPair1D), intent(inout) :: this
+    
+  end subroutine laplacian
+  
   subroutine derivativeNth(this)
     type(TransformPair1D), intent(inout) :: this
   end subroutine derivativeNth

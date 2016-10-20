@@ -16,37 +16,118 @@
 program test_chebyshev
   use, intrinsic :: iso_c_binding
   use constants
-  use Chebyshev
+  use Cheby
   implicit none
 
   integer :: order
   type(Chebyshev) :: transform
 
-  order = 50
+  order = 10
+  open(unit=99,file='tests.dat') ! fix this ugly non-locality
+  open(unit=98,file='basis.dat')
+  call check_basis(order,.false.)
+  call check_basis_derivs(order,.false.)
+  print*,"derivs"
   call check_gaussian(order,.false.)
   call check_gaussian(order,.true.)
 contains
 
+  subroutine check_basis(o,endpoints)
+    integer, intent(in) :: o
+    logical, intent(in) :: endpoints
+    integer :: i, j
+    real(dl), dimension(0:o) :: test_func, tmp, tmp_c
+
+    open(unit=97,file='basis-test.dat')
+    call create_chebyshev(transform,o,2,endpoints,.false.)
+    do i=0,o
+       test_func = transform%invTrans(:,i)
+       tmp_c = matmul(transform%fTrans,test_func)
+       tmp = matmul(transform%invTrans,tmp_c)
+       do j=0,o
+          write(97,*) transform%xGrid(j), test_func(j), tmp(j), tmp_c(j)
+       enddo
+       write(97,*)
+    enddo
+    call destroy_chebyshev(transform)
+    close(unit=97)
+  end subroutine check_basis
+
+  subroutine check_basis_derivs(o,endpoints)
+    integer, intent(in) :: o
+    logical, intent(in) :: endpoints
+    integer :: i,j
+    real(dl), dimension(0:o) :: test_func, tmp, tmp_c
+    integer :: nd
+
+    nd = 1
+    open(unit=97,file='basis-deriv.dat')
+    call create_chebyshev(transform,o,2,endpoints,.false.)
+    if (.not. endpoints) then
+       do i=0,o
+          test_func = transform%invTrans(:,i)
+          tmp_c = matmul(transform%fTrans,test_func)
+          tmp = matmul(transform%derivs(:,:,nd),tmp_c)
+          print*,"Maximal derivative error is ",maxval(abs(tmp(:)-transform%derivs(:,i,nd)))
+          print*,"Maximal error from analytic formula is ",maxval(abs(tmp(:)-dble(i)*sin(i*acos(transform%xGrid(:)))/sqrt(1._dl-transform%xGrid(:)**2)))
+          print*,"Maximal error from analytic formula for recurrence is ",maxval(abs(transform%derivs(:,i,nd)-dble(i)*sin(i*acos(transform%xGrid(:)))/sqrt(1._dl-transform%xGrid(:)**2)))
+          do j=0,o
+             write(97,*) transform%xGrid(j), transform%derivs(j,i,nd), tmp(j), tmp_c(j)
+          enddo
+          write(97,*)
+       enddo
+    endif
+    call destroy_chebyshev(transform)
+    close(unit=97)
+  end subroutine check_basis_derivs
+  
   subroutine check_gaussian(o,endpoints)
     integer, intent(in) :: o
     logical, intent(in) :: endpoints
     real(dl), dimension(0:o) :: test_func
     real(dl), dimension(0:o) :: deriv, deriv_n
-    real(dl), parameter :: sigma2_inv = 1._dl/4._dl
-
+    real(dl), parameter :: sigma2_inv = 4.*64._dl
+    integer :: i,j
+    
     call create_chebyshev(transform,o,2,endpoints,.false.)
+    if (.not. endpoints) then
+       do i=0,o
+          do j=0,o
+             write(98,*) transform%xGrid(j), transform%invTrans(j,i)
+          enddo
+          write(98,*)
+       enddo
+    endif
+    
     test_func = exp(-0.5_dl*sigma2_inv*transform%xGrid(:)**2)
-
+    
+    deriv = matmul(transform%fTrans,test_func)
+    deriv_n = matmul(transform%invTrans,deriv)
+    do i=0,o
+       write(99,*) transform%xGrid(i), test_func(i), deriv(i), deriv_n(i)
+    enddo
+    write(99,*)
+    print*,"Maximal error in double transformation is ", maxval(abs(deriv_n(:)-test_func(:)))
+    
     ! Test first derivative
     deriv = -sigma2_inv*transform%xGrid(:)*test_func(:)
+!    deriv_n = matmul(transform%fTrans(:,:),test_func(:))
+!    deriv_n = matmul(transform%derivs(:,:,1),deriv_n)
     deriv_n = matmul(transform%derivs(:,:,1),test_func(:))
-    print*,"Maximal error in first derivative is ", maxval(abs(deriv-deriv_n))
-
+    print*,"Maximal error in first derivative is ", maxval(abs(deriv(:)-deriv_n(:)))
+    do i=0,o
+       write(99,*) transform%xGrid(i), deriv_n(i), deriv(i)
+    enddo
+    write(99,*)
+    
     ! Test second derivative
     deriv = -sigma2_inv*test_func(:) + sigma2_inv**2*transform%xGrid(:)**2*test_func(:)
     deriv_n = matmul(transform%derivs(:,:,2),test_func(:))
     print*,"Maximal error in second derivative is ", maxval(abs(deriv-deriv_n))
-
+    do i=0,o
+       write(99,*) transform%xGrid(i), deriv_n(i), deriv(i)
+    enddo
+    write(99,*)
     call destroy_chebyshev(transform)
   end subroutine check_gaussian
 
@@ -56,4 +137,10 @@ contains
     logical, intent(in) :: endpoints
   end subroutine check_sinewave
 
+  subroutine check_polynomial(o,endpoints,coeffs)
+    integer, intent(in) :: o
+    logical, intent(in) :: endpoints
+    real(dl), intent(in) :: coeffs(0:o)
+  end subroutine check_polynomial
+  
 end program test_chebyshev
