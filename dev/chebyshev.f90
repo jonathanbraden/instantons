@@ -35,10 +35,10 @@ module Cheby
   !> wVals - Weights to be used in quadrature integrations
   type Chebyshev
      integer :: nx, ord, nDeriv
-     real(C_DOUBLE), allocatable :: xGrid(:), weights(:), norm(:)
-     real(C_DOUBLE), allocatable :: fTrans(:,:)
-     real(C_DOUBLE), allocatable :: invTrans(:,:)
-     real(C_DOUBLE), allocatable :: derivs(:,:,:)
+     real(dl), allocatable :: xGrid(:), weights(:), norm(:)
+     real(dl), allocatable :: fTrans(:,:)
+     real(dl), allocatable :: invTrans(:,:)
+     real(dl), allocatable :: derivs(:,:,:)
   end type Chebyshev
 
 contains
@@ -74,6 +74,7 @@ contains
        do i=0,ord
           x = this%xGrid(i)
           call evaluate_chebyshev(ord,x,BVals,nd)
+!          call evaluate_chebyshev_trig(ord,x,BVals,nd)
           this%invTrans(i,:) = BVals(:,0)
           this%derivs(i,:,1:nd) = BVals(:,1:nd)
        enddo
@@ -81,7 +82,8 @@ contains
     else
        do i=0,ord
           x = this%xGrid(i)
-          call evaluate_chebyshev(ord,x,BVals,nd)
+!          call evaluate_chebyshev(ord,x,BVals,nd)
+          call evaluate_chebyshev_trig(ord,x,BVals,nd)
           this%invTrans(i,:) = BVals(:,0)
           this%derivs(i,:,1:nd) = BVals(:,1:nd)
           !this%fTrans(:,i) = this%weights(i)*BVals(:,0) !/ this%norm(:)
@@ -100,7 +102,7 @@ contains
     !>@todo: Rather than doing a numerical matrix multiplication here, use explicit formulas in the above loop
     do i=1,nd
        !call DGEMM
-       this%derivs(:,:,i) = matmul(this%derivs(:,:,i),this%fTrans(:,:))
+!       this%derivs(:,:,i) = matmul(this%derivs(:,:,i),this%fTrans(:,:))
     enddo
   end subroutine create_chebyshev
 
@@ -129,6 +131,22 @@ contains
     quad = sum(this%weights(:)*f(:))
   end function quadrature
 
+  !>@brief
+  !> Create the nth derivative operator by repeated application of the first derivative
+  !>
+  !> WARNING: this must already have been initialised for this to work
+  subroutine generate_nth_derivative_matrix(this,nd,d_dx,dn_dx)
+    type(Chebyshev), intent(in) :: this
+    integer, intent(in) :: nd
+    real(dl), dimension(:,:), intent(in) :: d_dx
+    real(dl), dimension(:,:), intent(out) :: dn_dx
+    integer :: i
+    dn_dx = this%fTrans
+    do i=1,nd
+       dn_dx = matmul(d_dx,dn_dx)
+    enddo
+  end subroutine generate_nth_derivative_matrix
+  
 ! Some useful debugging subroutines
 ! 1. Check that forward and inverse transforms are inverses
 ! 2. Check how different multiple applications of derivative matrix and direct calculation of higher derivatives is
@@ -199,8 +217,6 @@ contains
     enddo
   end subroutine evaluate_chebyshev_recur
     
-
-
   !>@brief
   !> Evaluate Chebyshev polynomials using trigonometric representation
   !>
@@ -209,15 +225,20 @@ contains
   !> and the corresponding derivatives
   !>
   !>@todo
-  !> Finish writing this
+  !> Finish writing this, allow for Lobatto endpoints
   subroutine evaluate_chebyshev_trig(ord,x,T,nd)
     integer, intent(in) :: ord, nd
     real(dl), intent(in) :: x
     real(dl), intent(out) :: T(0:ord,0:nd)
-    real(dl) :: ci
+    real(dl) :: icn, dn
+    integer, dimension(0:ord) :: iVals
+    integer :: i
 
-    ci = acos(x)
-    
+    icn = dacos(x); dn = 1._dl / sqrt(1._dl-x**2)
+    iVals = (/ (i, i=0,ord) /)
+    T(:,0) = cos(iVals*icn)
+    T(:,1) = dble(iVals) * sin(dble(iVals)*icn) * dn
+    T(:,2) = cos(iVals*icn) * dble(iVals**2) * dn**2 + sin(iVals*icn) * iVals * dn**3 * x
   end subroutine evaluate_chebyshev_trig
 
   !>@brief
@@ -243,10 +264,11 @@ contains
     real*8 :: dkcol
     integer :: i
 
-    dkcol = twopi / 4._dl / dble(order+1)
+    dkcol = 0.5_dl* pi / dble(order+1)
     do i=0,order
-       x(i) = -cos((2._dl*i+1._dl)*dkcol)
+       x(i) = -dcos( dble(2*i+1)*dkcol )
     enddo
+    print*,""
     w = 2._dl / dble(order+1)
   end subroutine chebyshev_gauss_nodes
 
@@ -256,9 +278,9 @@ contains
     real*8 :: dkcol
     integer :: i
 
-    dkcol = twopi / 2._dl  / dble(order)
+    dkcol = pi  / dble(order)
     do i=0,order
-       x(i) = -cos(i*dkcol)
+       x(i) = -dcos(dble(i)*dkcol)
     enddo
     w = 2._dl / dble(order)
     w(0) = 1._dl / dble(order); w(order) = 1._dl / dble(order)
