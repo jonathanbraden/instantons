@@ -1,4 +1,7 @@
 ! To do. Add a flag to do error checking for derivative orders, etc. that can be easily turned off when performance is important
+!
+! Implement integration of a function of the entire interval by inverting the derivative matrix
+! Then test that this thing actually works
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
@@ -17,7 +20,7 @@
 !> where \f$B_i(x)\f$ is the \f$i\f$th Chebyshev polynomial and \f$N\f$ is the order of the expansion.
 !> The \f$B_i\f$'s satisfy the following recurrence relation
 !>  \f[ 
-!>     B_{i+1}(x) = 2xB_{i}(x) + 
+!>     B_{i+1}(x) = 2xB_{i}(x)  - B_{i-1}(x) 
 !>   \f]
 !> with the initial conditions
 !>  \f[ 
@@ -25,7 +28,11 @@
 !>  \f]
 !> They have the following integral normalisation
 !>  \f[  
-!>    \int dx \frac{B_i(x)B_j(x)}{\sqrt{1-x^2}} = 
+!>    \int dx \frac{B_i(x)B_j(x)}{\sqrt{1-x^2}} = \begin{cases} 
+!>                                                 \pi  &\quad : i=j=0 \\
+!>                                                 \frac{\pi}{2}  &\quad : i=j\neq 0\\
+!>                                                 0  &\quad : i \neq j
+!>                                                \end{cases}
 !>  \f]
 !> and are suitable for quadruature integration with weight function \f$w(x) = \left(1-x^2\right^{1/2}\f$
 !>  \f[
@@ -33,11 +40,11 @@
 !>  \f]
 !> with collocation points given by
 !>  \f[
-!>    x_i = \cos\left(\frac{\pi}{2}\left[ \right]\right)
+!>    x_i = \cos\left(\frac{\pi}{2(N+1)}(2i+1)\right) \qquad i=0,\dots,N
 !>  \f]
 !> for the Gaussian quadrature grid and
 !>  \f[
-!>    x_i = \cos\left(\right)
+!>    x_i = \cos\left(\frac{i\pi}{N}\right) \qquad i=0,\dots,N
 !>  \f]
 !> for the Gauss-Lobatto (i.e. extrema and endpoints) grid.
 !> The corresponding weight functions are
@@ -190,8 +197,6 @@ contains
   
   !>@brief
   !> Free the memory stored in the input Chebyshev object
-  !>@todo
-  !> Implement this
   subroutine destroy_chebyshev(this)
     type(Chebyshev), intent(inout) :: this
 
