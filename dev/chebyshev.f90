@@ -284,9 +284,11 @@ contains
     integer :: n, i
 
     ! Add error check to make sure xNew and fNew are the same size
+    ! Make sure that the indexing of xNew actually starts at 1 when it's defined implicitly
+    ! as it is here
     n = size(xNew)
     do i=1,n
-!       fNew(i) =   ! use evaluate_chebyshev
+!       fNew(i) = sum()  ! use evaluate_chebyshev
     enddo
   end subroutine interpolate
 
