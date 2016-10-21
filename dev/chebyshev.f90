@@ -1,4 +1,7 @@
 ! To do. Add a flag to do error checking for derivative orders, etc. that can be easily turned off when performance is important
+!
+! Implement integration of a function of the entire interval by inverting the derivative matrix
+! Then test that this thing actually works
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
@@ -6,8 +9,57 @@
 !> @author Jonathan Braden
 !>         University College London
 !>
+!> @brief
 !> This provides the functionality for doing pseudospectral differentiation,
 !> interpolation, (and Gaussian quadrature) using Chebyshev polynomial expansion
+!>
+!> This module provides the functionality for pseudospectral differential, interpolation and quadrature
+!> based on a Chebyshev polynomial expansion.
+!> The function we approximating is assumed to be expanded as
+!>  \f[ f(x) = \sum_{i=0}^N c_iB_i(x)  \f]
+!> where \f$B_i(x)\f$ is the \f$i\f$th Chebyshev polynomial and \f$N\f$ is the order of the expansion.
+!> The \f$B_i\f$'s satisfy the following recurrence relation
+!>  \f[ 
+!>     B_{i+1}(x) = 2xB_{i}(x)  - B_{i-1}(x) 
+!>   \f]
+!> with the initial conditions
+!>  \f[ 
+!>    B_0(x) = 1 \qquad B_1(x) = x \, .
+!>  \f]
+!> They have the following integral normalisation
+!>  \f[  
+!>    \int dx \frac{B_i(x)B_j(x)}{\sqrt{1-x^2}} = \begin{cases} 
+!>                                                 \pi  &\quad : i=j=0 \\
+!>                                                 \frac{\pi}{2}  &\quad : i=j\neq 0\\
+!>                                                 0  &\quad : i \neq j
+!>                                                \end{cases}
+!>  \f]
+!> and are suitable for quadruature integration with weight function \f$w(x) = \left(1-x^2\right^{1/2}\f$
+!>  \f[
+!>    \int dx \frac{f(x)}{\sqrt{1-x^2}} \approx \sum_i w_if(x_i)
+!>  \f]
+!> with collocation points given by
+!>  \f[
+!>    x_i = \cos\left(\frac{\pi}{2(N+1)}(2i+1)\right) \qquad i=0,\dots,N
+!>  \f]
+!> for the Gaussian quadrature grid and
+!>  \f[
+!>    x_i = \cos\left(\frac{i\pi}{N}\right) \qquad i=0,\dots,N
+!>  \f]
+!> for the Gauss-Lobatto (i.e. extrema and endpoints) grid.
+!> The corresponding weight functions are
+!>  \f[
+!>    w_i = 
+!>  \f]
+!> and
+!>  \f[
+!>    w_i = 
+!>  \f]
+!>  respectively.
+!>
+!> Implementation Details
+!>
+!> Example usage
 !>
 !>@todo
 !> Factor out all of the setup from the create_chebyshev call.  This will allow easier modularisation later
@@ -16,7 +68,10 @@
 !>
 !>@todo
 !> Add nice description of what this module is doing for the purposes of documentation
+!> When I'm doing the mappings, I currently have to first undo the transformation from spectral
+!> to real space, apply the change in derivatives, then transform back.  Fix this.
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#define USEBLAS  ! put this in a header
 
 module Cheby
   use, intrinsic :: iso_c_binding
@@ -80,7 +135,7 @@ contains
     enddo
 
     if (num_inv) then
-       ! Fill in code to numerically invert the inverse transform
+       ! Fill in code to numerically invert to get the inverse transform
     else
        do i=0,ord
           this%fTrans(:,i) = this%weights(:)*this%invTrans(:,i)
@@ -95,7 +150,7 @@ contains
     !> Rather than doing a numerical matrix multiplication here, use explicit formulas in the above loop
     !> Add DGEMM support
     do i=1,nd
-       !call DGEMM
+       !call DGEMM()
        this%derivs(:,:,i) = matmul(this%derivs(:,:,i),this%fTrans(:,:))
     enddo
   end subroutine create_chebyshev
@@ -372,6 +427,137 @@ contains
     enddo
   end subroutine make_backward_transform
 
-! Add in mapping subroutines here
+  !>@brief
+  !> Apply the coordinate transformation
+  !> \f$ y(x) = \sqrt{\frac{x}{2}+\frac{1}{2}}\f$
+  !> to transform to a basis of only the even Chebyshev polynomials
+  !>  \f[
+  !>    B_{2i}(y) = 
+  !>  \f]
+  !>
+  !>@todo
+  !> Add higher than second derivatives in here
+  subroutine transform_to_evens(this)
+    type(Chebyshev), intent(inout) :: this
+    real(dl), dimension(:,:), allocatable :: dmap
+    integer :: i, nd, ord
+    integer, parameter :: ndmax = 2
+
+    this%xGrid = sqrt(0.5_dl*this%xGrid + 0.5_dl)
+    nd = this%nDeriv; ord = this%ord
+    if (nd > 2) then
+       print*,"Error, only derivatives up to order 2 implemented in transform_to_evens, defaulting to ",ndmax
+       nd = ndmax
+    endif
+    allocate( dmap(0:this%ord,nd) )
+    dmap(:,1) = 4._dl*this%xGrid
+    dmap(:,2) = 4._dl
+    do i=3,nd
+       dmap(:,i) = 0._dl
+    enddo
+    call transform_derivatives(this,dmap)
+    deallocate( dmap )
+  end subroutine transform_to_evens
   
+  !>@brief
+  !> Transform to rational Chebyshev functions on the double infinite interval using the transform
+  !>  \f[
+  !>    y(x) = L\frac{x}{\sqrt{1-x^2}}
+  !>  \f]
+  subroutine transform_double_infinite(this, len)
+    type(Chebyshev), intent(inout) :: this
+    real(dl), intent(in) :: len
+    real(dl), dimension(:,:), allocatable :: dmap
+    integer :: j, ord
+
+    ord = this%ord
+    this%xGrid(:) = len*this%xGrid(:) / sqrt(1._dl - this%xGrid(:)**2)
+
+    allocate( dmap(0:this%ord,this%nDeriv) )
+    dmap(:,1) = len**2 / (len**2 + this%xGrid(:)**2)**1.5
+    dmap(:,2) = -3._dl*len**2*this%xGrid / (len**2 + this%xGrid(:)**2)**2.5
+    call transform_derivatives(this,dmap)
+    deallocate(dmap)
+  end subroutine transform_double_infinite
+
+  !>@brief
+  !> Transform to rational Chebyshev functions on the singly infinite interval using the coordinate transform
+  !>  \f[
+  !>    y(x) = L\frac{1+x}{1-x}
+  !>  \f]
+  subroutine transform_semi_infinite(this, len)
+    type(Chebyshev), intent(inout) :: this
+    real(dl), intent(in) :: len
+  end subroutine transform_semi_infinite
+
+
+  !>@brief
+  !> Given the derivatives of the mapping parameter, make the appropriate transformations of the
+  !> derivative matrices
+  !>
+  !> Given the derivatives of a coordinate mapping to a new set of coordinates for our spatial grid,
+  !> this subroutine will make the appropriate transformations of the derivative operators so that
+  !> that act in the new coordinate system.
+  subroutine transform_derivatives(this,dmap)
+    type(Chebyshev), intent(inout) :: this
+    real(dl), dimension(:,:), intent(in) :: dmap
+    integer :: ord, nd
+    integer :: j
+    integer, parameter :: ndmax = 2
+
+    ord = this%ord; nd = this%nDeriv
+    if (nd > 2) then
+       print*,"Error, cannot transform coordinates for derivatives larger than ",ndmax
+       print*,"Reverting to ",ndmax," transformed derivatives"
+       nd = ndmax
+    endif
+
+    ! Convert back to spectral space to get a matrix of basis function derivatives
+    do j=1,nd
+       this%derivs(:,:,j) = matmul(this%derivs(:,:,j),this%invTrans(:,:))
+    enddo
+    ! Transform the derivatives to the new coordinates
+    do j=0,ord
+       this%derivs(:,j,2) = dmap(:,1)**2*this%derivs(:,j,2) + dmap(:,2)*this%derivs(:,j,1)
+       this%derivs(:,j,1) = dmap(:,1)*this%derivs(:,j,1)
+    enddo
+    ! Transform the derivative matrices to act in real space
+    do j=1,nd
+       this%derivs(:,:,j) = matmul(this%derivs(:,:,j),this%fTrans(:,:))
+    enddo
+  end subroutine transform_derivatives
+
+  !>@brief
+  !> Given the coordinate mapping between two coordinate systems at the given sets of collocation points,
+  !> compute the derivatives between the mappings using numerical differentiation.
+  !> Due to instabilities of numerical differentiation and other numerical artifacts, it is preferable
+  !> to have analytic expressions for these mappings if possible.
+  !>
+  !> Given an original set of collocation points \f$x_i\f$, and their mapped locations \f$y_i = y(x_i)\f$,
+  !> use numerical differentiation to compute
+  !>  \f[
+  !>    \frac{d^{(m)}x}{dy^{(m)}} = 
+  !>  \f]
+  !> up to some specified order.
+  !>
+  !>
+  !>@todo
+  !> Add a warning label to the use of this automated procedure
+  !> Write this procedure
+  !> If I want to write a general thing, it might be better to use a refined collocation grid to compute the
+  !> numerical derivatives and then transform back
+  subroutine differentiate_mapping(this, xOld,xNew, dMap, nd)
+    type(Chebyshev), intent(in) :: this
+    real(dl), dimension(:), intent(in) :: xOld, xNew
+    real(dl), dimension(:,:), intent(out) :: dMap
+    integer, intent(in) :: nd
+  end subroutine differentiate_mapping
+
+  !>@brief
+  !> Perform a coordinate transform specified by the subroutine pointer
+  !>@todo Write this stupid thing
+  subroutine transform_coordinates(this)
+    type(Chebyshev), intent(inout) :: this
+  end subroutine transform_coordinates
+
 end module Cheby
