@@ -20,8 +20,11 @@ module Model
   type Model
      type(Chebyshev) :: tForm
      real(dl) :: lambda, delta
+     real(dl), dimension(:), allocatable :: params
+     real(dl) :: tension, drho, phit, phif
+     real(dl) :: r0, width
   end type Model
-  
+
 contains
   ! Think more carefully about how to do this
   subroutine initialise_model(this,trans)
