@@ -49,7 +49,7 @@ contains
     enddo
     
     if (l.eq.maxit) then
-       print*,"Failed to find local minimum of potential. Adust guess"
+       print*,"Failed to find local minimum of potential. Adjust guess"
        stop
     endif
     print*,"Vacuum is ",fld," derivative is ",vprime(fld)
