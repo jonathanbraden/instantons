@@ -1,12 +1,15 @@
 program instanton
   use constants
-  use chebyshev
+  use Cheby
   use field_model
   implicit none
 
+! Nonlinear Solver Parameters and storage.  To be moved to a separate module upon code cleanup
+  
+
   type(Field_Model) :: model
   type(Chebyshev) :: pspec
-  real(dl), dimension(:), allocatable :: instanton, instanton_i
+  real(dl), dimension(:), allocatable :: instanton, instanton_prev
   real(dl), dimension(:), allocatable :: model_params
 
   integer :: order
@@ -14,18 +17,24 @@ program instanton
   integer :: i
   
   order = 100
-  w = 1._dl; len = 20. 
-  ! Initialise our derivatives
-  call initialise_chebyshev(pspec)
+  w = 1._dl; len = 20._dl
+  ! Initialise our derivatives and set up collocation grid
+  call create_chebyshev(transform,order,2,.false.,.true.)
+  call transform_to_evens(transform)
+  call cluster_points(transform,w,.true.)
+  call transform_double_infinite(transform,len)
+
   call create_model(model)
 
-  call initialise_field_analytic()
+  allocate(instanton(0:order),instanton_prev(0:order))
+  call initialise_fields(.false.)
+
   do i=1,nparam
-     call initialise_field_numerical()
-     call nonlinear_solve()
-     call output()
+     instanton(:) = instanton_prev(:)
+     ! Call the solver
+     instanton_prev(:) = instanton(:)
   enddo
-  
+
 contains
 
   !>@brief
@@ -39,12 +48,33 @@ contains
     if (prev) then
        
     else
-       call thin_wall_profile()
+!       call thin_wall_profile()
     endif
   end subroutine initialise_fields
 
   !>@brief
-  !> Given the previous instanton profile, adjust the coordinate mapping to
+  !> Compute the radius and width of the thin-wall using the tension, vacuum splitting and number of dimensions
+  subroutine thin_wall_params(rinit,width,sigma,drho,dim)
+    real(dl), intent(out) :: rinit, width
+    real(dl), intent(in) :: sigma, drho
+    integer, intent(in) :: dim
+
+    rinit = dble(dim)*sigma / drho
+    width = 1._dl  ! Make this actually work
+  end subroutine thin_wall_params
+
+  !>@brief
+  !> Compute the thin wall profile.  This will be more easily stored in the model subroutine
+  subroutine thin_wall_profile(rvals,phi,r0,w0,phit,phif)
+    real(dl), dimension(:), intent(in) :: rvals
+    real(dl), dimension(:), intent(out) :: phi
+    real(dl), intent(in) :: r0, w0, phit, phif
+    
+    phi = -0.5_dl*(phit-phif)*tanh((x-r0)/w0) + 0.5_dl*(phit+phif)
+  end subroutine thin_wall_profile
+
+  !>@brief
+  !> Given the previous instanton profile, adjust the coordinate mapping to the new grid
   subroutine adapt_grid()
   end subroutine adapt_grid
 

@@ -12,6 +12,7 @@
 
 program instanton
   use constants
+  use Cheby
   implicit none
 
 ! Number of fields, basis functions and collocation points
@@ -38,10 +39,14 @@ program instanton
   real,dimension(XRANGE) :: map_p, map_pp
 
   integer :: i,j,l
-  real :: lambda = 1.e-3
+  real :: lambda = 1.e-3  ! this won't work here
 
-  real :: width,wback
+  real :: width,wback ! wback is needed in evalf
   real :: phif, phit
+
+! Added with refactoring.  The stuff above this should eventually disappear
+  type(Chebyshev) :: transform
+  real(dl), parameter :: wp = 2._dl
 
 #ifdef CUBIC
   rinit =  1.5*2.**0.5/deltavals(1)
@@ -62,12 +67,12 @@ program instanton
   call get_vacuum(phif)
   phifalse = phif
   call get_vacuum(phit)
-  call get_collocation_points(xgrid, wgrid, nmax)
-  call get_basis_matrix(b, bp, bpp)
-  call transform_to_evens(xgrid)
-  call cluster_points(xgrid,2.,.true.)
-  call transform_double_infinite(xgrid,len)
-  call make_transform_matrix()
+
+  ! Set up our spectral derivatives and transform
+  call create_chebyshev(transform,nmax,2,.false.,.true.)  ! Check the last two flags
+  call transform_to_evens(transform)
+  call cluster_points(transform,w,.true.)
+  call transform_double_infinite(transform,len)
 
 ! Debugging to check transforms
 !  call debug_check()
@@ -222,7 +227,6 @@ contains
     l2 =  vprime(freal)
     S(1:fsize) = -matmul(l0,freal) + l2(XRANGE)
     tmpl = S
-
 ! Set boundary condition at infinity
     L(fsize,:) = 0.
     L(fsize,fsize) = 1.
@@ -314,95 +318,6 @@ contains
 
     profile = tanh((x-rinit)/2.**0.5)
   end function profile
-
-  subroutine transform_to_evens(xvals)
-    real, dimension(XRANGE), intent(inout) :: xvals
-    integer :: j
-    
-    xvals = sqrt(0.5*xvals+0.5)
-    map_p = 4.*xvals
-    map_pp = 4.
-    do j=0,nbasis
-       bpp(:,j) = map_p**2*bpp(:,j) + map_pp*bp(:,j)
-       bp(:,j) = bp(:,j) * map_p
-    enddo
-  end subroutine transform_to_evens
-
-  subroutine transform_double_infinite(xvals, length)
-    real, dimension(XRANGE), intent(inout) :: xvals
-    real, intent(in) :: length
-    integer :: j
-
-    xvals = length*xvals / sqrt(1.-xvals**2)
-    map_p = length**2 / (length**2 + xvals**2)**1.5
-    map_pp = -3.*length**2*xvals / (length**2 + xvals**2)**2.5
-    do j=0,nbasis
-       bpp(:,j) = map_p**2*bpp(:,j) + map_pp*bp(:,j)
-       bp(:,j) = map_p * bp(:,j)
-    enddo
-  end subroutine transform_double_infinite
-
-  subroutine cluster_points(xvals, w, evens)
-    real, dimension(XRANGE), intent(inout) :: xvals
-    real, intent(in) :: w
-    logical, intent(in) :: evens
-
-    integer :: j
-    real, dimension(XRANGE) :: xshift
-    real :: winv
-
-    winv = 1./w
-    if (evens) then
-       xshift = pi*(xvals-0.5)
-       xvals = atan(w*tan(xshift)) / pi + 0.5
-       xshift = pi*(xvals-0.5) ! why did I do this again?
-       map_p = winv*(1.+tan(xshift)**2) / (1. + winv**2*tan(xshift)**2)
-       map_pp = 2.*pi*winv*(1.-winv**2)*tan(xshift)*(1.+tan(xshift)**2)/(1.+winv**2*tan(xshift)**2)**2
-       do j=0, nbasis
-          bpp(:,j) = map_p**2*bpp(:,j) + map_pp*bp(:,j)
-          bp(:,j) = map_p * bp(:,j)
-       enddo
-       wback = winv
-    else
-       print*,"Error, transform currently only works to cluster even Chebyshev points"
-    endif
-  end subroutine cluster_points
-!
-! Subroutines to set up basis functions and transformation matrices, etc.
-!
-  subroutine make_transform_matrix()
-! Matrix to transform between real and spectral basis, includes weights (This thing is dependent on choice of basis functions, so it should be put in a subroutine
-! Used as c = mmt*r,  r=b*c, c: spectral vector, r: real space vector, mmt: transform.  For Chebyshev, probably better to use DCT for speed (worry later)
-    do i=0,nbasis
-       mmt(:,i) = b(:,i)*wgrid(:)
-    enddo
-    mmt(:,0) = 0.5*mmt(:,0)  ! integral normalization of T_0 is different
-    mmt = transpose(mmt)
-  end subroutine make_transform_matrix
-
-  subroutine get_basis_matrix(b,bp,bpp)
-    real, dimension(XRANGE, BRANGE) :: b,bp,bpp
-    real, dimension(BRANGE) :: c,cp,cpp
-
-    real :: xcur
-    integer :: i
-    XLOOP
-       xcur = xgrid(i)
-       call chebychev(nbasis, xcur, c, cp, cpp)
-       b(i,:) = c(:)
-       bp(i,:) = cp(:)
-       bpp(i,:) = cpp(:)
-    ENDXLOOP
-  end subroutine get_basis_matrix
-
-  !> Initialise collocation points for our solver
-  subroutine get_collocation_points(xvals, wvals, order)
-    real :: xvals(0:order), wvals(0:order)
-    integer, intent(in) :: order
-    
-    call gauss_cheby(xvals, wvals, order)
-!    call gauss_lobatto(xvals, wvals, order)
-  end subroutine get_collocation_points
 
 ! Subroutines to evaluate desired spectral basis functions and derivatives
   subroutine output_resampled()
