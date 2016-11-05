@@ -20,8 +20,11 @@ module Model
   type Model
      type(Chebyshev) :: tForm
      real(dl) :: lambda, delta
+     real(dl), dimension(:), allocatable :: params
+     real(dl) :: tension, drho, phit, phif
+     real(dl) :: r0, width
   end type Model
-  
+
 contains
   ! Think more carefully about how to do this
   subroutine initialise_model(this,trans)
@@ -135,7 +138,7 @@ contains
     enddo
     
     if (l.eq.maxit) then
-       print*,"Failed to find local minimum of potential. Adust guess"
+       print*,"Failed to find local minimum of potential. Adjust guess"
        stop
     endif
     print*,"Vacuum is ",fld," derivative is ",vprime(fld)
