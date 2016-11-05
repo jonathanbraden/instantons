@@ -62,13 +62,15 @@ program instanton
   call get_vacuum(phif)
   phifalse = phif
   call get_vacuum(phit)
+  !!!!!!!!!!!!!!!!!!!!!! Replaced with Chebyshev class
   call get_collocation_points(xgrid, wgrid, nmax)
   call get_basis_matrix(b, bp, bpp)
   call transform_to_evens(xgrid)
   call cluster_points(xgrid,2.,.true.)
   call transform_double_infinite(xgrid,len)
   call make_transform_matrix()
-
+  !!!!!!!!!!!!!!!!!!!!!!!
+  
 ! Debugging to check transforms
 !  call debug_check()
 
