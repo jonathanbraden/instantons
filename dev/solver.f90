@@ -39,7 +39,7 @@ contains
     type(Solver), intent(inout) :: this
     integer, intent(in) :: n,nit
     real(dl), intent(in) :: kick
-    this%nVar = n; this%maxIter = 100; this%kick_param = 0.1_dl
+    this%nVar = n; this%maxIter = nit; this%kick_param = kick
     allocate(this%L(1:n,1:n),this%L_const(1:n,1:n)); allocate(this%S(1:n))
     allocate(this%del(1:n)); allocate(this%f_prev(1:n))
     allocate(this%ipiv(1:n))
