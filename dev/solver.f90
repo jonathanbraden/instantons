@@ -130,9 +130,9 @@ contains
   !>@brief
   !> Look for solutions using combined Newton and gradient descent method
   !> This will presumably be more robust, although somewhat slower.
-  subroutine newton_gradient(this)
+  subroutine levenberg_marquadt(this)
     type(Solver), intent(in) :: this
-  end subroutine newton_gradient
+  end subroutine levenberg_marquadt
 
   !>@brief
   !> Look for solutions to the differential equation by performing a gradient flow.
@@ -147,13 +147,28 @@ contains
   !>  \f[
   !>    \delta\phi_l \propto \sum_i S_i\frac{\delta S_i}{\delta \phi_l} = \sum_i S_iL_{ij}
   !>  \f]
-  !>
+  !> The solution is then updated to
+  !>  \f[
+  !>    \phi^{(i+1)} = \phi^{(i)} + \alpha\delta\phi^{(i)}
+  !>  \f]
+  !> where the parameter \f$\alpha\f$ is determined by doing a line-search along the gradient vector direction
+  !> such that it minimises \f$E(\phi^{(i+1)})\f$
   !>@todo
   !>@arg Fill in some more explanation of what this is doing
-  subroutine gradient_solve(this)
+  subroutine gradient_solve(this, f_cur)
     type(Solver), intent(in) :: this
-    real(dl), parameter :: scl = 1._dl  ! distance to flow along gradient.  Figure out how to compute
+    real(dl), dimension(:), intent(inout) :: f_cur
+
+    real(dl) :: alpha
+    integer :: i
   end subroutine gradient_solve
+
+  !>@todo
+  !>@arg Implement this thing
+  subroutine conjugate_gradient(this, f_cur)
+    type(Solver), intent(in) :: this
+    real(dl), dimension(:), intent(inout) :: f_cur
+  end subroutine conjugate_gradient
 
   !>@brief
   !> Output information from the nonlinear solver.  This can be useful for debugging, or to assess
@@ -171,10 +186,15 @@ contains
 !!!!!!
 ! Temporary inclusion here before factoring into a separate file
 !!!!!!
- ! subroutine source(fld,eom)
- !   real(dl), intent(in) :: fld
- !   real(dl), intent(out) :: eom
+ ! subroutine source(fld,src)
+ !   real(dl), dimension(:), intent(in) :: fld
+ !   real(dl), dimension(:), intent(out) :: src
  !   integer :: i  
  ! end subroutine source
   
+ ! subroutine eom(fld,eom)
+ !   real(dl), dimension(:), inent(in) :: fld
+ !   real(dl), dimension(:), intent(out) :: eom
+ ! end subroutine eom
+
 end module Nonlinear_Solver

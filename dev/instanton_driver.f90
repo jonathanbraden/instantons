@@ -12,6 +12,7 @@
 
 program instanton
   use constants
+  use Nonlinear_Solver
   use Cheby
   implicit none
 
@@ -46,6 +47,7 @@ program instanton
 
 ! Added with refactoring.  The stuff above this should eventually disappear
   type(Chebyshev) :: transform
+  type(Solver) :: solv
   real(dl), parameter :: wp = 2._dl
 
 #ifdef CUBIC
@@ -74,6 +76,8 @@ program instanton
   call cluster_points(transform,w,.true.)
   call transform_double_infinite(transform,len)
 
+  call initialise_solver(solv,nmax,100,0.1_dl)
+
 ! Debugging to check transforms
 !  call debug_check()
 
@@ -95,6 +99,7 @@ program instanton
 
   do l=1,maxit
      call linesolve()
+ 
 ! Stopping condition
      print*,maxval(abs(error)), maxval(abs(del))
      if ( (maxval(abs(error(:))) < errtol) .and. (maxval(abs(del(:))) < deltol) ) exit
@@ -112,6 +117,9 @@ program instanton
 !  call output_resampled_1d(512.,2.**0.5*13.*10./512.)
 !  call output_resampled()
   call get_evalues()
+
+  call delete_solver(solv)
+  call 
 
 contains
 
@@ -207,6 +215,7 @@ contains
     close(unit=97)
   end subroutine debug_check
 
+#ifdef OLD
   subroutine linesolve()
     real, dimension(1:fsize,1:fsize) :: L
     real, dimension(1:fsize) :: S
@@ -265,7 +274,7 @@ contains
     print*, b0, b1, alpha
     call output_debug()
   end subroutine linesolve
-
+#endif
 ! Do do, pass in function instead of directly using freal
   subroutine get_evalues( )
     real, dimension(1:fsize,1:fsize) :: L
