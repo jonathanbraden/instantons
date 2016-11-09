@@ -86,20 +86,12 @@ contains
     type(Solver), intent(inout) :: this
     real(dl), dimension(:), intent(inout) :: f_cur
     integer :: i, info
-    real(dl) :: alpha, err_rms, err_max, res
-    real(dl) :: b1  ! fix this and remove it
-    
-    ! Use the equations of motion to fill the Linear and Source term
-    ! call fill_equations(this%L,this%S,f_cur) ! write this.  Currently in model file
-    ! Do source and linear part separately
-    !
-    !!!! These should be moved into a separate file.  For now I'm storing them in here
-    !this%L(:,:) = l0(:,:)  ! Put in the linear piece
-    !do i=1,this%nVar
-    !   L(i,i) = L(i,i) - vdprime(phi)
-    !enddo
-    ! The stuff above this is completely broken right now
+    real(dl) :: alpha
+    real(dl) :: err_rms, err_max, res
 
+    !call variation(this%L, f_cur)
+    !call source(this%S, f_cur)
+    
     res = sqrt(sum(this%S**2))  ! Current residual
     ! Compute the required perturbation
     call DGESV(this%nVar,1,this%L,this%ipiv,this%S,this%nVar,info)
@@ -116,7 +108,6 @@ contains
        alpha = alpha/2._dl
        this%f_prev = f_cur + alpha*this%del
        this%S = 0._dl !source(this%f_prev) ! replace with a call to source
-       this%S = this%S
        err_max = maxval(abs(this%S))
        err_rms = sqrt(sum(this%S**2))
        if (err_rms < res) exit
@@ -163,7 +154,7 @@ contains
     integer :: i
 
     do i=1,this%nVar
-       write(this%u,*) 
+       write(this%u,*) this%f_prev(i), this%del(i), this%S(i)
     enddo
     write(this%u,*)
   end subroutine solver_output
