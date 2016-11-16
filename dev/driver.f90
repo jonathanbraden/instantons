@@ -30,10 +30,6 @@ program Instanton
   w = 0.5_dl
   ! Initialise our derivatives and set up collocation grid
   call create_grid(transform,order,w,len)
-!  call create_chebyshev(transform,order,2,.false.,.true.)
-!  call transform_to_evens(transform)
-!  call cluster_points(transform,w,.true.)
-!  call transform_double_infinite(transform,len)
 
   call create_solver(solv,n,100,0.1_dl)
   call initialise_equations(transform,delta)
@@ -48,6 +44,7 @@ program Instanton
 
   call solve(solv, phi)
   call output_simple(transform%xGrid,phi,.true.)
+!  call output()
 
 !  do i=1,nparam
 !     instanton(:) = instanton_prev(:)
@@ -151,7 +148,7 @@ contains
 
     sz = size(xvals)
     do i=1,sz
-       write(u,*) xvals(i), phi(i)
+       write(u,*) xvals(i), phi(i), potential(phi(i)), vdprime(phi(i))
     enddo
   end subroutine output_simple
 
@@ -173,21 +170,24 @@ contains
   !>@todo
   !>@arg Modify this to allow for more than one field being solved for
   subroutine output(phi,tForm,sol,init)
-    real(dl), dimension(:), intent(in) :: phi
+    real(dl), dimension(1:), intent(in) :: phi
     type(Chebyshev), intent(in) :: tForm
     type(Solver), intent(in) :: sol
     logical, intent(in) :: init
     integer :: u, i, sz
+    real(dl), dimension(:), allocatable :: phi_spec
 
     sz = size(phi)
+    allocate(phi_spec(1:sz))
+    phi_spec = matmul(tForm%fTrans,phi)
     !!!! Make this safer
     if (init) then
        u = 98
-       open(unit=u,file='instanton.dat')
+       open(unit=u,file='instanton-full.dat')
     endif
 
-    do i=0,sz-1
-       write(u,*) tForm%xGrid(i), phi(i)
+    do i=1,sz
+       write(u,*) tForm%xGrid(i-1), phi(i), potential(phi(i)), vdprime(phi(i)), phi_spec(i)
     enddo
   end subroutine output
 

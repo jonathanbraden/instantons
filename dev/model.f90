@@ -19,6 +19,7 @@ module Model
 
   type Model
      type(Chebyshev) :: tForm
+     integer :: ndim
      real(dl) :: lambda, delta
      real(dl), dimension(:), allocatable :: params
      real(dl) :: tension, drho, phit, phif
