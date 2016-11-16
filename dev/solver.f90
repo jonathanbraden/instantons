@@ -14,6 +14,7 @@
 
 module Nonlinear_Solver
   use constants
+  use Cheby
 !  use Model
   implicit none
   
@@ -35,7 +36,11 @@ module Nonlinear_Solver
 !       real(dl), dimension(:), intent(out) :: eom
 !     end subroutine src
 !  end interface
-  
+
+  ! This variable declaration is termporary and should be moved
+  real(dl), dimension(:,:), allocatable :: L0
+  real(dl) :: del
+
 contains
 
   subroutine create_solver(this,n, nit, kick)
@@ -47,6 +52,9 @@ contains
     allocate(this%del(1:n)); allocate(this%f_prev(1:n))
     allocate(this%ipiv(1:n))
 
+    allocate( L0(1:n,1:n) )  ! Change this so it's a local variable somewhere.  Best to put it in a model file.  Hmm, it's already in here ...
+    L0 = 0._dl  ! Wrong, fix it
+    
     this%u = 99  ! Change this to a call to the next open solver
     open(unit=this%u,file='solver-output.dat')
   end subroutine create_solver
@@ -62,14 +70,25 @@ contains
   subroutine solve(this,f_cur)
     type(Solver), intent(inout) :: this
     real(dl), dimension(:), intent(inout) :: f_cur
-    integer :: i
+    integer :: i; logical :: test
     
     do i=1,this%maxIter
+       print*,"Iterating solver ",i
        call line_iteration(this,f_cur)
-       !call output_solver(this)
+       call output_solver(this)
+       if (stop_solver(this)) exit
     enddo
   end subroutine solve
   
+  !>@brief
+  !> Stopping condition for our nonlinear solver
+  function stop_solver(this) result(test)
+    type(Solver), intent(in) :: this
+    logical :: test
+
+    test = (maxval(abs(this%S(:))) < 1.e-10) .and. (maxval(abs(this%del(:))) < 1.e-10)
+  end function stop_solver
+
   !>@brief
   !> Nonlinear solver based on Newton's method, with the extension to consider
   !> variable length paths along the Newton iteration to improve convergence properties.
@@ -91,21 +110,27 @@ contains
   subroutine line_iteration(this,f_cur)
     type(Solver), intent(inout) :: this
     real(dl), dimension(:), intent(inout) :: f_cur
-    integer :: i, info
+    integer :: i, info, n
     real(dl) :: alpha
     real(dl) :: err_rms, err_max, res
-
-    call variation(this%L, f_cur)
-    call source(this%S, f_cur)
+    real(dl) :: b1  ! remove this later
+    
+    n = this%nVar
+    
+    call variation(f_cur, this%L)
+    call source(f_cur, this%S)
     
     res = sqrt(sum(this%S**2))  ! Current residual
+    print*,"Residual is ",res
     ! Compute the required perturbation
-    call DGESV(this%nVar,1,this%L,this%ipiv,this%S,this%nVar,info)
+    call DGESV(n,1,this%L,n,this%ipiv,this%S,n,info)
     this%del = this%S
     if (info /= 0) then
        print*,"Error inverting linear matrix in solver"
        stop  ! Improve this error handling
     endif
+
+!    print*,"del vector is "; print*,this%del
 
     ! Why am I ever setting this thing here?
     b1 = res + this%kick_param ! If we're not converging, this allows us to kick ourselves
@@ -113,15 +138,18 @@ contains
     do i=1,8
        alpha = alpha/2._dl
        this%f_prev = f_cur + alpha*this%del
-       this%S = 0._dl !source(this%f_prev) ! replace with a call to source
+       call source(this%f_prev, this%S) ! replace with a call to source
        err_max = maxval(abs(this%S))
        err_rms = sqrt(sum(this%S**2))
+       print*,"b1 is ",err_rms**2," b0 is ",res**2," alpha is ",alpha
        if (err_rms < res) exit
     enddo
 
+    print*,"Done line search with alpha = ",alpha
+    print*,""
     this%f_prev = f_cur            ! Store previous iteration
     f_cur = f_cur + alpha*this%del  ! Update function
-    this%S = 0._dl !source(f_cur)          ! Store violation of the equation of motion
+    call source(f_cur, this%S)          ! Store violation of the equation of motion
   end subroutine line_iteration
 
   !>@brief
@@ -178,32 +206,51 @@ contains
        write(this%u,*) this%f_prev(i), this%del(i), this%S(i)
     enddo
     write(this%u,*)
-  end subroutine solver_output
+  end subroutine output_solver
 
 !!!!!!
 ! Temporary inclusion here before factoring into a separate file
 !!!!!!
+
+  subroutine initialise_equations(tForm, delta)
+    type(Chebyshev), intent(in) :: tForm
+    real(dl), intent(in) :: delta
+    integer :: i, sz
+    sz = size(tForm%xGrid)
+    do i=0,sz-1
+       L0(i+1,:) = tForm%derivs(i,:,2) + 3._dl*tForm%derivs(i,:,1)/tForm%xGrid(i)
+    enddo
+    del = delta
+    ! In the original code, there's a multiplication by the MMT.  Make sure that this is already included in my definition of derivs
+  end subroutine initialise_equations
+  
 ! Preprocessor for inlining
-#define VPRIME(f) (f*(f**2-1._dl))
+#define VPRIME(f) ((f+del)*(f**2-1._dl))
   subroutine source(fld,src)
     real(dl), dimension(1:), intent(in) :: fld
     real(dl), dimension(1:), intent(out) :: src
-    integer :: i
-    src(:) = VPRIME(f(:))
+    integer :: sz
+
+    sz = size(fld)
+    src(:) = -matmul(L0,fld)
+    src(:) = src(:) + (fld(:)+del)*(fld(:)**2-1._dl)  !VPRIME(fld(:))
     src(sz) = 0._dl  ! Set boundary condition at infinity
   end subroutine source
 
-#define VDPRIME(f) (3._dl*f**2 - 1._dl)
+#define VDPRIME(f) (3._dl*f**2 - 1._dl + 2._dl*del*f)
   subroutine variation(fld,var)
     real(dl), dimension(1:), intent(in) :: fld
     real(dl), dimension(1:,1:), intent(out) :: var
     integer :: i, sz
 
     sz = size(fld)
-    var(1:sz,1:sz) = L0(:,:)
+    var(1:sz,1:sz) = L0(1:sz,1:sz)
     do i=1,sz
-       var(i,i) = var(i,i) - VDPRIME(fld(i))
+       var(i,i) = var(i,i) - (3._dl*fld(i)**2-1._dl +2._dl*del*fld(i))  !VDPRIME(fld(i))
     enddo
+    ! boundary condition at infinity
+    var(sz,:) = 0._dl
+    var(sz,sz) = 1._dl
   end subroutine variation
 
   !>@brief
@@ -214,7 +261,7 @@ contains
   !>  \f[
   !>    \alpha_R f(x_R) + \beta_R f'(x_R) = c_R
   !>  \f]
-  subroutine boundaries(L,S,coeffs,end)
+  subroutine boundaries(L,S,c,end)
     real(dl), intent(inout) :: L(1:,1:), S(1:)
     real(dl), intent(in), dimension(1:3,1:2) :: c
     logical, dimension(1:2), intent(in) :: end
@@ -227,7 +274,7 @@ contains
     endif
     if (end(2)) then
        L(:,:) = c(1,2) + c(2,2)
-       S(nz) = c(3,2)
+       S(sz) = c(3,2)
     endif
   end subroutine boundaries
 
