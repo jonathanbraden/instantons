@@ -43,6 +43,9 @@ contains
     allocate(this%L(1:n,1:n),this%L_const(1:n,1:n)); allocate(this%S(1:n))
     allocate(this%del(1:n)); allocate(this%f_prev(1:n))
     allocate(this%ipiv(1:n))
+
+    this%u = 99  ! Change this to a call to the next open solver
+    open(unit=this%u,file='solver-output.dat')
   end subroutine create_solver
 
   subroutine delete_solver(this)
@@ -164,7 +167,7 @@ contains
   !>@brief
   !> Output information from the nonlinear solver.  This can be useful for debugging, or to assess
   !> convergence of our iterator
-  subroutine solver_output(this)
+  subroutine output_solver(this)
     type(Solver), intent(in) :: this
     integer :: i
 
