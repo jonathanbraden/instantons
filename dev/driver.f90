@@ -1,6 +1,7 @@
 program Instanton
   use constants
   use Cheby
+  use Model
   use Nonlinear_Solver
   implicit none
 
@@ -28,26 +29,15 @@ program Instanton
   order = 100; n=order+1
   w = 0.5_dl
   ! Initialise our derivatives and set up collocation grid
-  call create_chebyshev(transform,order,2,.false.,.true.)
-  call transform_to_evens(transform)
-  call cluster_points(transform,w,.true.)
-  call transform_double_infinite(transform,len)
-
-!  print*,""
-!  print*,"X Grid is "
-!  print*,transform%xGrid
-!  print*,""
+  call create_grid(transform,order,w,len)
+!  call create_chebyshev(transform,order,2,.false.,.true.)
+!  call transform_to_evens(transform)
+!  call cluster_points(transform,w,.true.)
+!  call transform_double_infinite(transform,len)
 
   call create_solver(solv,n,100,0.1_dl)
   call initialise_equations(transform,delta)
 !  call create_model(model)
- 
-!  print*,""
-!  print*,"L0 is "
-!  do i=1,n
-!     print*,L0(i,:)
-!  enddo
-!  print*,""
 
   allocate(phi(0:order),phi_prev(0:order))
   call initialise_fields(.false.)
@@ -55,10 +45,6 @@ program Instanton
   call get_vacuum(phif); call get_vacuum(phit)
   print*,"vacua are ", phit, phif
   phi = -0.5_dl*(phit-phif)*tanh((transform%xGrid-r0)/w0) + 0.5_dl*(phit+phif)
-
-!  print*,"phi is "
-!  print*,phi
-!  print*,""
 
   call solve(solv, phi)
   call output_simple(transform%xGrid,phi,.true.)
@@ -72,6 +58,17 @@ program Instanton
   call delete_solver(solv)
   
 contains
+
+  subroutine create_grid(tForm,ord,w,l)
+    type(Chebyshev), intent(out) :: tForm
+    integer, intent(in) :: ord
+    real(dl), intent(in) :: w,l
+
+    call create_chebyshev(tForm,ord,2,.false.,.true.)
+    call transform_to_evens(tForm)
+    call cluster_points(tForm,w,.true.)
+    call transform_double_infinite(tForm,l)
+  end subroutine create_grid
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! Delete the stuff up until the end of delete
@@ -102,26 +99,6 @@ contains
     print*,"Vacuum is ",fld," derivative is ",vprime(fld)
   end subroutine get_vacuum
 
-!
-! Define the model through it's potential
-!
-  elemental function potential(phi)
-    real(dl) :: potential
-    real(dl), intent(in) :: phi
-    potential = 0.25_dl*(phi**2-1._dl)**2 + delta*(phi**3/3._dl - phi)
-  end function potential
-
-  elemental function vprime(phi)
-    real(dl) :: vprime
-    real(dl), intent(in) :: phi
-    vprime =  (phi+delta)*(phi**2 - 1.)
-  end function vprime
-
-  elemental function vdprime(phi)
-    real(dl) :: vdprime
-    real(dl), intent(in) :: phi
-    vdprime =  3.*phi**2 - 1. + 2.*delta*phi
-  end function vdprime
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! End Delete

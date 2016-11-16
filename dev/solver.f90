@@ -15,7 +15,7 @@
 module Nonlinear_Solver
   use constants
   use Cheby
-!  use Model
+  use Model
   implicit none
   
   type Solver
@@ -37,10 +37,6 @@ module Nonlinear_Solver
 !     end subroutine src
 !  end interface
 
-  ! This variable declaration is termporary and should be moved
-  real(dl), dimension(:,:), allocatable :: L0
-  real(dl) :: del
-
 contains
 
   subroutine create_solver(this,n, nit, kick)
@@ -51,9 +47,6 @@ contains
     allocate(this%L(1:n,1:n),this%L_const(1:n,1:n)); allocate(this%S(1:n))
     allocate(this%del(1:n)); allocate(this%f_prev(1:n))
     allocate(this%ipiv(1:n))
-
-    allocate( L0(1:n,1:n) )  ! Change this so it's a local variable somewhere.  Best to put it in a model file.  Hmm, it's already in here ...
-    L0 = 0._dl  ! Wrong, fix it
     
     this%u = 99  ! Change this to a call to the next open solver
     open(unit=this%u,file='solver-output.dat')
@@ -207,75 +200,5 @@ contains
     enddo
     write(this%u,*)
   end subroutine output_solver
-
-!!!!!!
-! Temporary inclusion here before factoring into a separate file
-!!!!!!
-
-  subroutine initialise_equations(tForm, delta)
-    type(Chebyshev), intent(in) :: tForm
-    real(dl), intent(in) :: delta
-    integer :: i, sz
-    sz = size(tForm%xGrid)
-    do i=0,sz-1
-       L0(i+1,:) = tForm%derivs(i,:,2) + 3._dl*tForm%derivs(i,:,1)/tForm%xGrid(i)
-    enddo
-    del = delta
-    ! In the original code, there's a multiplication by the MMT.  Make sure that this is already included in my definition of derivs
-  end subroutine initialise_equations
-  
-! Preprocessor for inlining
-#define VPRIME(f) ((f+del)*(f**2-1._dl))
-  subroutine source(fld,src)
-    real(dl), dimension(1:), intent(in) :: fld
-    real(dl), dimension(1:), intent(out) :: src
-    integer :: sz
-
-    sz = size(fld)
-    src(:) = -matmul(L0,fld)
-    src(:) = src(:) + (fld(:)+del)*(fld(:)**2-1._dl)  !VPRIME(fld(:))
-    src(sz) = 0._dl  ! Set boundary condition at infinity
-  end subroutine source
-
-#define VDPRIME(f) (3._dl*f**2 - 1._dl + 2._dl*del*f)
-  subroutine variation(fld,var)
-    real(dl), dimension(1:), intent(in) :: fld
-    real(dl), dimension(1:,1:), intent(out) :: var
-    integer :: i, sz
-
-    sz = size(fld)
-    var(1:sz,1:sz) = L0(1:sz,1:sz)
-    do i=1,sz
-       var(i,i) = var(i,i) - (3._dl*fld(i)**2-1._dl +2._dl*del*fld(i))  !VDPRIME(fld(i))
-    enddo
-    ! boundary condition at infinity
-    var(sz,:) = 0._dl
-    var(sz,sz) = 1._dl
-  end subroutine variation
-
-  !>@brief
-  !> A subroutine to set general Robin boundary conditions on our fields
-  !>  \f[
-  !>    \alpha_L f(x_L) + \beta_L f'(x_L) = c_L
-  !>  \f]
-  !>  \f[
-  !>    \alpha_R f(x_R) + \beta_R f'(x_R) = c_R
-  !>  \f]
-  subroutine boundaries(L,S,c,end)
-    real(dl), intent(inout) :: L(1:,1:), S(1:)
-    real(dl), intent(in), dimension(1:3,1:2) :: c
-    logical, dimension(1:2), intent(in) :: end
-    integer :: sz
-    sz = size(S)
-
-    if (end(1)) then
-       L(:,:) = c(1,1) + c(2,1)
-       S(1) = c(3,1)
-    endif
-    if (end(2)) then
-       L(:,:) = c(1,2) + c(2,2)
-       S(sz) = c(3,2)
-    endif
-  end subroutine boundaries
 
 end module Nonlinear_Solver
