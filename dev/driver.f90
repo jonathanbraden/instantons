@@ -21,9 +21,15 @@ program Instanton
 
   real(dl) :: delta
 
-  delta = 0.1_dl
-  r0 = 1.5_dl*2._dl**0.5/delta; w0=2.**0.5
-  phif=-1.; phit=1.
+  ! Values of double well
+!  delta = 0.5_dl
+!  r0 = 1.5_dl*2._dl**0.5/delta; w0=2.**0.5
+!  phif=-1.; phit=1.
+
+  delta = 0.55_dl
+  r0 = 3._dl*2._dl**0.5*delta**0.5
+  phif = 0._dl; phit = pi
+
   len = r0*3._dl**0.5
   
   order = 100; n=order+1
@@ -37,7 +43,6 @@ program Instanton
 
   allocate(phi(0:order),phi_prev(0:order))
   call initialise_fields(.false.)
-  
   call get_vacuum(phif); call get_vacuum(phit)
   print*,"vacua are ", phit, phif
   phi = -0.5_dl*(phit-phif)*tanh((transform%xGrid-r0)/w0) + 0.5_dl*(phit+phif)
@@ -148,7 +153,7 @@ contains
 
     sz = size(xvals)
     do i=1,sz
-       write(u,*) xvals(i), phi(i), potential(phi(i)), vdprime(phi(i))
+       write(u,*) xvals(i), phi(i), potential(phi(i)) - potential(phif), vdprime(phi(i))
     enddo
   end subroutine output_simple
 
