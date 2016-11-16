@@ -35,7 +35,7 @@ module Nonlinear_Solver
   
 contains
 
-  subroutine intialise_solver(this,n, nit, kick)
+  subroutine create_solver(this,n, nit, kick)
     type(Solver), intent(inout) :: this
     integer, intent(in) :: n,nit
     real(dl), intent(in) :: kick
@@ -43,7 +43,7 @@ contains
     allocate(this%L(1:n,1:n),this%L_const(1:n,1:n)); allocate(this%S(1:n))
     allocate(this%del(1:n)); allocate(this%f_prev(1:n))
     allocate(this%ipiv(1:n))
-  end subroutine intialise_solver
+  end subroutine create_solver
 
   subroutine delete_solver(this)
     type(Solver), intent(inout) :: this
@@ -89,8 +89,8 @@ contains
     real(dl) :: alpha
     real(dl) :: err_rms, err_max, res
 
-    !call variation(this%L, f_cur)
-    !call source(this%S, f_cur)
+    call variation(this%L, f_cur)
+    call source(this%S, f_cur)
     
     res = sqrt(sum(this%S**2))  ! Current residual
     ! Compute the required perturbation
@@ -177,15 +177,52 @@ contains
 !!!!!!
 ! Temporary inclusion here before factoring into a separate file
 !!!!!!
- ! subroutine source(fld,src)
- !   real(dl), dimension(:), intent(in) :: fld
- !   real(dl), dimension(:), intent(out) :: src
- !   integer :: i  
- ! end subroutine source
-  
- ! subroutine eom(fld,eom)
- !   real(dl), dimension(:), inent(in) :: fld
- !   real(dl), dimension(:), intent(out) :: eom
- ! end subroutine eom
+! Preprocessor for inlining
+#define VPRIME(f) (f*(f**2-1._dl))
+  subroutine source(fld,src)
+    real(dl), dimension(1:), intent(in) :: fld
+    real(dl), dimension(1:), intent(out) :: src
+    integer :: i
+    src(:) = VPRIME(f(:))
+    src(sz) = 0._dl  ! Set boundary condition at infinity
+  end subroutine source
+
+#define VDPRIME(f) (3._dl*f**2 - 1._dl)
+  subroutine variation(fld,var)
+    real(dl), dimension(1:), intent(in) :: fld
+    real(dl), dimension(1:,1:), intent(out) :: var
+    integer :: i, sz
+
+    sz = size(fld)
+    var(1:sz,1:sz) = L0(:,:)
+    do i=1,sz
+       var(i,i) = var(i,i) - VDPRIME(fld(i))
+    enddo
+  end subroutine variation
+
+  !>@brief
+  !> A subroutine to set general Robin boundary conditions on our fields
+  !>  \f[
+  !>    \alpha_L f(x_L) + \beta_L f'(x_L) = c_L
+  !>  \f]
+  !>  \f[
+  !>    \alpha_R f(x_R) + \beta_R f'(x_R) = c_R
+  !>  \f]
+  subroutine boundaries(L,S,coeffs,end)
+    real(dl), intent(inout) :: L(1:,1:), S(1:)
+    real(dl), intent(in), dimension(1:3,1:2) :: c
+    logical, dimension(1:2), intent(in) :: end
+    integer :: sz
+    sz = size(S)
+
+    if (end(1)) then
+       L(:,:) = c(1,1) + c(2,1)
+       S(1) = c(3,1)
+    endif
+    if (end(2)) then
+       L(:,:) = c(1,2) + c(2,2)
+       S(nz) = c(3,2)
+    endif
+  end subroutine boundaries
 
 end module Nonlinear_Solver

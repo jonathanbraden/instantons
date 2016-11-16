@@ -1,14 +1,14 @@
 program instanton
   use constants
   use Cheby
+  use Nonlinear_Solver
   use field_model
   implicit none
 
 ! Nonlinear Solver Parameters and storage.  To be moved to a separate module upon code cleanup
-  
-
   type(Field_Model) :: model
   type(Chebyshev) :: pspec
+  type(Solver) :: solv
   real(dl), dimension(:), allocatable :: instanton, instanton_prev
   real(dl), dimension(:), allocatable :: model_params
 
@@ -24,6 +24,8 @@ program instanton
   call cluster_points(transform,w,.true.)
   call transform_double_infinite(transform,len)
 
+  call create_solver(solv)
+  
   call create_model(model)
 
   allocate(instanton(0:order),instanton_prev(0:order))

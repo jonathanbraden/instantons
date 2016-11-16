@@ -12,8 +12,8 @@
 
 program instanton
   use constants
-  use Nonlinear_Solver
   use Cheby
+  use Nonlinear_Solver
   implicit none
 
 ! Number of fields, basis functions and collocation points
@@ -437,13 +437,5 @@ contains
     enddo
 
   end subroutine evalf
-
-  subroutine evalbasis(x, b, ncoeff)
-    integer, intent(in) :: ncoeff
-    real, intent(in) :: x
-    real, intent(out), dimension(3,0:ncoeff) :: b
-
-    call chebychev(ncoeff, x, b(1,:), b(2,:), b(3,:))
-  end subroutine evalbasis
 
 end program instanton
