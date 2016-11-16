@@ -70,6 +70,43 @@ contains
     call transform_double_infinite(tForm,l)
   end subroutine create_grid
 
+  !>@brief
+  !> Get the eigenvalues around the instanton solution on the original collocation grid
+  subroutine get_evalues(phi,n,init)
+    real(dl), dimension(:), intent(in) :: phi
+    integer, intent(in) :: n
+    logical, intent(in) :: init
+
+    double precision, dimension(1:n,1:n) :: L
+    double precision, dimension(1:n) :: eval_real, eval_imag
+    integer :: ierror
+    double precision :: dummy(1:1)
+    real, allocatable, dimension(:), save :: work
+    integer, save :: iwork
+    integer :: i, imax(1)
+
+    ! Allocate workspace
+    if (init) then
+       call DGEEV('N','N',n,L,n,eval_real,eval_imag,dummy,1,dummy,1,dummy,-1,ierror)
+       if (ierror == 0) then
+          iwork = int(dummy(1))
+          allocate(work(1:iwork))
+       else
+          print*,"Error allocating workspace for eigenvalue problem, exiting"
+          stop
+       endif
+    endif
+
+    call variation(phi,L)  ! Change this if different boundary conditions are needed
+
+    call DGEEV('N','N',n,L,n,eval_real,eval_imag,dummy,1,dummy,1,work,iwork,ierror)
+    if (ierror /= 0) then
+       print*,"Error in eigenvalue solution"
+       stop
+    endif
+   
+  end subroutine get_evalues
+
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! Delete the stuff up until the end of delete
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -184,9 +221,6 @@ contains
   !> Interpolate our previous instanton solution to the new collocation grid
   subroutine interpolate_to_new_grid()
   end subroutine interpolate_to_new_grid
-
-  subroutine get_evalues()
-  end subroutine get_evalues
   
   subroutine get_evectors()
   end subroutine get_evectors
