@@ -1,22 +1,21 @@
-program instanton
+program Instanton
   use constants
   use Cheby
   use Nonlinear_Solver
-  use field_model
   implicit none
 
 ! Nonlinear Solver Parameters and storage.  To be moved to a separate module upon code cleanup
-  type(Field_Model) :: model
-  type(Chebyshev) :: pspec
+!  type(Field_Model) :: model
+  type(Chebyshev) :: transform
   type(Solver) :: solv
-  real(dl), dimension(:), allocatable :: instanton, instanton_prev
+  real(dl), dimension(:), allocatable :: phi, phi_prev
   real(dl), dimension(:), allocatable :: model_params
 
-  integer :: order
+  integer :: order, n
   real(dl) :: w, len  ! parameters controlling mapping of collocation grid
   integer :: i
   
-  order = 100
+  order = 3; n=order+1
   w = 1._dl; len = 20._dl
   ! Initialise our derivatives and set up collocation grid
   call create_chebyshev(transform,order,2,.false.,.true.)
@@ -24,19 +23,21 @@ program instanton
   call cluster_points(transform,w,.true.)
   call transform_double_infinite(transform,len)
 
-  call create_solver(solv)
-  
-  call create_model(model)
-
-  allocate(instanton(0:order),instanton_prev(0:order))
+  call create_solver(solv,n,5,0.1_dl)
+!  call create_model(model)
+ 
+  allocate(phi(0:order),phi_prev(0:order))
   call initialise_fields(.false.)
+  call solve(solv, phi)
+  
+!  do i=1,nparam
+!     instanton(:) = instanton_prev(:)
+!     call solve(solv, instanton)
+!     instanton_prev(:) = instanton(:)
+!  enddo
 
-  do i=1,nparam
-     instanton(:) = instanton_prev(:)
-     ! Call the solver
-     instanton_prev(:) = instanton(:)
-  enddo
-
+  call delete_solver(solv)
+  
 contains
 
   !>@brief
@@ -72,7 +73,7 @@ contains
     real(dl), dimension(:), intent(out) :: phi
     real(dl), intent(in) :: r0, w0, phit, phif
     
-    phi = -0.5_dl*(phit-phif)*tanh((x-r0)/w0) + 0.5_dl*(phit+phif)
+    phi = -0.5_dl*(phit-phif)*tanh((rvals-r0)/w0) + 0.5_dl*(phit+phif)
   end subroutine thin_wall_profile
 
   !>@brief
