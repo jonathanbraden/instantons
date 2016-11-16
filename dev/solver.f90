@@ -9,6 +9,9 @@
 !> required to obtain instanton profiles
 !>
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+#define SOLVER_DEBUG 1
+
 module Nonlinear_Solver
   use constants
 !  use Model

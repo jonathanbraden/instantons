@@ -15,6 +15,9 @@ program instanton
   integer :: order
   real(dl) :: w, len  ! parameters controlling mapping of collocation grid
   integer :: i
+
+  ! Move these parameters somewhere else
+  real(dl) :: phit, phif,r0,w0
   
   order = 100
   w = 1._dl; len = 20._dl
@@ -30,6 +33,8 @@ program instanton
 
   allocate(instanton(0:order),instanton_prev(0:order))
   call initialise_fields(.false.)
+  instanton = -0.5_dl*(phit-phif)*tanh((x-r0)/w0) + 0.5_dl*(phit+phif)
+
 
   do i=1,nparam
      instanton(:) = instanton_prev(:)
@@ -48,7 +53,7 @@ contains
     logical, intent(in) :: prev
 
     if (prev) then
-       
+       instanton(:) = instanton_prev(:)
     else
 !       call thin_wall_profile()
     endif
