@@ -221,7 +221,7 @@ contains
 
     if (present(init)) then
        if (init) then
-          open(unit=99,file="instanton.dat")
+          open(unit=99,file="instanton-test.dat")
        endif
        return
     endif
