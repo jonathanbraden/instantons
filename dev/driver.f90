@@ -21,11 +21,17 @@ program Instanton
 
   real(dl) :: delta
 
-  delta = 0.1_dl
-  r0 = 1.5_dl*2._dl**0.5/delta; w0=2.**0.5
-  phif=-1.; phit=1.
-  len = r0*3._dl**0.5
+  ! For double well
+!  delta = 0.8_dl
+!  r0 = 1.5_dl*2._dl**0.5/delta; w0=2.**0.5
+!  phif=-1.; phit=1.
+
+  ! For Drummond
+  delta = 0.51_dl
+  r0 = 3._dl*2._dl**0.5*delta**0.5
+  phif = 0._dl; phit = pi
   
+  len = r0*3._dl**0.5
   order = 100; n=order+1
   w = 0.5_dl
   ! Initialise our derivatives and set up collocation grid
