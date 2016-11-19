@@ -20,6 +20,7 @@ program Instanton
   real(dl) :: phit, phif,r0,w0
 
   real(dl) :: delta
+  real(dl), dimension(1:10) :: deltas = (/ 0.51, 0.52, 0.55, 0.6, 0.7, 0.8, 0.9, 1., 2. ,4. /)
 
   ! Values of double well
 !  delta = 0.5_dl
@@ -51,15 +52,27 @@ program Instanton
   call output_simple(transform%xGrid,phi,.true.)
 !  call output()
 
-!  do i=1,nparam
-!     instanton(:) = instanton_prev(:)
-!     call solve(solv, instanton)
-!     instanton_prev(:) = instanton(:)
-!  enddo
+  do i=1,size(deltas)
+     ! call bubble_params()
+     ! call create_grid()
+     ! call initialise_field() ! Add interpolation in here
+     phi = -0.5_dl*(phit-phif)*tanh((transform%xGrid-r0)/w0) + 0.5_dl*(phit+phif)
+     call solve(solv, phi)
+     call output_simple(transform%xGrid,phi,.false.)
+     !instanton_prev(:) = instanton(:)
+  enddo
 
   call delete_solver(solv)
   
 contains
+
+  subroutine bubble_params(r0,w0,len,w)
+    real(dl), intent(out) :: r0, w0, len, w
+    r0 = 3._dl*2._dl**0.5*delta**0.5
+    w0 = 2.**0.5
+    len = r0*3._dl**0.5
+    w = 0.5_dl  ! Adjust this
+  end subroutine bubble_params
 
   subroutine create_grid(tForm,ord,w,l)
     type(Chebyshev), intent(out) :: tForm
@@ -159,6 +172,7 @@ contains
     do i=1,sz
        write(u,*) xvals(i), phi(i), potential(phi(i)) - potential(phif), vdprime(phi(i)), dphi(i), phi_spec(i)
     enddo
+    write(u,*)
   end subroutine output_simple
 
   !>@brief

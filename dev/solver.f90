@@ -66,7 +66,6 @@ contains
     integer :: i; logical :: test
     
     do i=1,this%maxIter
-       print*,"Iterating solver ",i
        call line_iteration(this,f_cur)
        call output_solver(this)
        if (stop_solver(this)) exit
@@ -114,7 +113,6 @@ contains
     call source(f_cur, this%S)
     
     res = sqrt(sum(this%S**2))  ! Current residual
-    print*,"Residual is ",res
     ! Compute the required perturbation
     call DGESV(n,1,this%L,n,this%ipiv,this%S,n,info)
     this%del = this%S
@@ -138,7 +136,6 @@ contains
        if (err_rms < res) exit
     enddo
 
-    print*,"Done line search with alpha = ",alpha
     print*,""
     this%f_prev = f_cur            ! Store previous iteration
     f_cur = f_cur + alpha*this%del  ! Update function
@@ -200,5 +197,13 @@ contains
     enddo
     write(this%u,*)
   end subroutine output_solver
+
+  !>@brief
+  !> Write a brief summary of the last state of the nonlinear solver to the screen
+  subroutine print_solver(this)
+    type(Solver), intent(in) :: this
+
+    print*,"RMS violation of the EOM is ",sqrt(sum(this%S**2))
+  end subroutine print_solver
 
 end module Nonlinear_Solver
