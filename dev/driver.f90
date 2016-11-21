@@ -26,14 +26,14 @@ program Instanton
 !  r0 = 1.5_dl*2._dl**0.5/delta; w0=2.**0.5
 !  phif=-1.; phit=1.
 
-  delta = 0.55_dl
+  delta = 8._dl
   r0 = 3._dl*2._dl**0.5*delta**0.5; w0=2.**0.5
   phif = 0._dl; phit = pi
 
   len = r0*3._dl**0.5
   
-  order = 100; n=order+1
-  w = 0.5_dl
+  order = 200; n=order+1
+  w = 0.25_dl
   ! Initialise our derivatives and set up collocation grid
   call create_grid(transform,order,w,len)
 
@@ -154,7 +154,7 @@ contains
 
     sz = size(xvals)
     allocate(phi_spec(sz), dphi(sz))
-    phi_spec = matmul(transform%fTrans,phi)
+    phi_spec = matmul(transform%fTrans,phi) 
     dphi = matmul(transform%derivs(:,:,1),phi)
     do i=1,sz
        write(u,*) xvals(i), phi(i), potential(phi(i)) - potential(phif), vdprime(phi(i)), dphi(i), phi_spec(i)
