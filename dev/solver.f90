@@ -68,7 +68,7 @@ contains
     do i=1,this%maxIter
        call line_iteration(this,f_cur)
        call output_solver(this)
-       if (stop_solver(this)) exit
+       if (stop_solver(this)) then; print*,"finished in ",i," iterations"; exit; endif
     enddo
   end subroutine solve
   
@@ -132,11 +132,11 @@ contains
        call source(this%f_prev, this%S) ! replace with a call to source
        err_max = maxval(abs(this%S))
        err_rms = sqrt(sum(this%S**2))
-       print*,"b1 is ",err_rms**2," b0 is ",res**2," alpha is ",alpha
+!       print*,"b1 is ",err_rms**2," b0 is ",res**2," alpha is ",alpha
        if (err_rms < res) exit
     enddo
 
-    print*,""
+!    print*,""
     this%f_prev = f_cur            ! Store previous iteration
     f_cur = f_cur + alpha*this%del  ! Update function
     call source(f_cur, this%S)          ! Store violation of the equation of motion
