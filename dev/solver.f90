@@ -10,7 +10,7 @@
 !>
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-#define DEBUG_SOLVER 1
+!#define DEBUG_SOLVER 1
 
 module Nonlinear_Solver
   use constants
@@ -101,7 +101,8 @@ contains
     do i=1,this%maxIter
        call line_iteration(this,f_cur)
        call output_solver(this)
-       if (stop_solver(this)) then; print*,"finished in ",i," iterations"; exit; endif
+       call print_solver(this)
+       if (stop_solver(this)) exit
     enddo
     print*,""
     write(this%u,*) ""
@@ -180,11 +181,6 @@ contains
 !    call DGESVX(,'N',n,1,this%L,n,this%lu_factor,n,this%ipiv,'N', , ,this%S,n, ,
 #endif
 
-! This section of code factors out the radial position of the bubble wall to solve separately
-#ifdef COLLECTIVE
-    
-#endif
-    
     this%del = this%S
     if (info /= 0) then
        print*,"Error inverting linear matrix in solver"
