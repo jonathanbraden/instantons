@@ -128,6 +128,16 @@ contains
 !    call eqn(this%L,this%S,phi_cur)
 !  end subroutine line_iteration
 
+  subroutine solve_radius(this,f_cur)
+    type(Solver), intent(inout) :: this
+    real(dl), dimension(:), intent(inout) :: f_cur
+    real(dl), dimension(:), allocatable :: f_prime
+
+    allocate(f_prime(1:size(f_cur)))
+    f_prime = matmul(transform%derivs(:,:,1),f_cur)
+    
+  end subroutine solve_radius
+  
   !>@brief
   !> Nonlinear solver based on Newton's method, with the extension to consider variable
   !> distances along the Newton iteration path to ensure the solution is converging
@@ -170,6 +180,11 @@ contains
 !    call DGESVX(,'N',n,1,this%L,n,this%lu_factor,n,this%ipiv,'N', , ,this%S,n, ,
 #endif
 
+! This section of code factors out the radial position of the bubble wall to solve separately
+#ifdef COLLECTIVE
+    
+#endif
+    
     this%del = this%S
     if (info /= 0) then
        print*,"Error inverting linear matrix in solver"
@@ -250,9 +265,12 @@ contains
   subroutine output_solver(this)
     type(Solver), intent(in) :: this
     integer :: i
-
+    real(dl), dimension(:), allocatable :: f_deriv
+    
+    allocate(f_deriv(1:size(this%f_prev)))
+    f_deriv = matmul(transform%derivs(:,:,1),this%f_prev)
     do i=1,this%nVar
-       write(this%u,*) this%f_prev(i), this%del(i), this%S(i), this%S_prev(i)
+       write(this%u,*) this%f_prev(i), this%del(i), this%S(i), this%S_prev(i), f_deriv(i)
     enddo
     write(this%u,*)
   end subroutine output_solver
