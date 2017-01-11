@@ -17,6 +17,7 @@ program Instanton
   integer :: i
 
   ! Move these parameters somewhere else
+!  type(Bubble_Params) :: bubble
   real(dl) :: phit, phif,r0,w0
 
   real(dl) :: delta
@@ -41,6 +42,8 @@ program Instanton
   call create_solver(solv,n,100,0.1_dl)
   call initialise_equations(transform,delta)
 !  call create_model(model)
+
+!  call set_bubble_params(bubble,phit,phif,phit,,,3)
 
   allocate(phi(0:order),phi_prev(0:order))
   call initialise_fields(.false.)
@@ -84,6 +87,24 @@ contains
     call cluster_points(tForm,w,.true.)
     call transform_double_infinite(tForm,l)
   end subroutine create_grid
+
+  subroutine interpolate_phi(phi_new, xNew, phi_old, xOld)
+    real(dl), dimension(1:), intent(out) :: phi_new
+    real(dl), dimension(1:), intent(in) :: xNew, phi_old, xOld
+    real(dl), dimension(:), allocatable :: phi_spec
+    real(dl), dimension(:,:), allocatable :: basis
+    integer :: i, ord
+
+    ord = size(phi_old)-1
+    allocate( phi_spec(0:ord) ); allocate(basis(0:ord,0:2))
+    phi_spec = matmul(transform%fTrans, phi_old)
+    do i=1,size(xNew)
+       call evaluate_chebyshev(ord,xNew(i),basis,0)
+       phi_new(i) = sum(phi_spec(:)*basis(:,0))
+    enddo
+
+    deallocate(phi_spec)
+  end subroutine interpolate_phi
 
   !>@brief
   !> Get the eigenvalues around the instanton solution on the original collocation grid
