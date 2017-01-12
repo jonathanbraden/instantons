@@ -30,14 +30,18 @@ program Instanton
 !  r0 = 1.5_dl*2._dl**0.5/delta; w0=2.**0.5
 !  phif=-1.; phit=1.
 
-  delta = 4._dl; meff = (2.*delta)**0.5
+  delta = 0.71_dl; meff = (2.*delta)**0.5
   r0 = 3._dl*2._dl**0.5*delta**0.5; w0=2.**0.5 ! This w0 should depend on delta since the mass does.  Fix it!!!!  This will also require adjusting the w used on my collocation grid.  easiest to just adjust wbase?
   phif = 0._dl; phit = pi
 
   len = r0*3._dl**0.5
   
   order = 200; n=order+1
-  w = wbase/len/meff
+  if (delta > 0.7) then
+     w = wbase/len/meff
+  else
+     w = wbase / len
+  endif
   ! Initialise our derivatives and set up collocation grid
   print*,"w is ",w
   call create_grid(transform,order,w,len)
@@ -50,9 +54,12 @@ program Instanton
   call initialise_fields(.false.)
   call get_vacuum(phif); call get_vacuum(phit)
   print*,"vacua are ", phit, phif
-!  phi = -0.5_dl*(phit-phif)*tanh((transform%xGrid-r0)/w0) + 0.5_dl*(phit+phif)
-  phi = -2._dl*atan(exp((transform%xGrid-r0)*meff)) + pi ! For Drummond
-  
+  if (delta > 0.7) then
+     phi = -2._dl*atan(exp((transform%xGrid-r0)*meff)) + pi ! For Drummond
+  else
+     phi = -0.5_dl*(phit-phif)*tanh((transform%xGrid-r0)/w0) + 0.5_dl*(phit+phif)
+  endif
+     
   call solve(solv, phi)
   call output_simple(transform%xGrid,phi,.true.)
   call get_action(phi,transform)
