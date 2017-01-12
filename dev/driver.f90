@@ -15,7 +15,7 @@ program Instanton
 
   integer :: order, n
   real(dl) :: w, len  ! parameters controlling mapping of collocation grid
-  real(dl), parameter :: wbase = 1.5_dl
+  real(dl), parameter :: wbase = 25._dl
   real(dl) :: meff
   integer :: i
 
@@ -23,14 +23,14 @@ program Instanton
   real(dl) :: phit, phif,r0,w0
   
   real(dl) :: delta
-  real(dl), dimension(1:15) :: deltas = (/ 0.50001, 0.5001, 0.501, 0.505, 0.51, 0.52, 0.55, 0.6, 0.7, 0.8, 0.9, 1., 2. , 3., 5. /)
+  real(dl), dimension(1:20) :: deltas = (/ 0.50001, 0.5001, 0.501, 0.505, 0.51, 0.52, 0.55, 0.6, 0.7, 0.8, 0.9, 1., 2. , 4., 10., 20., 50., 100., 200., 500. /)
 
   ! Values of double well
 !  delta = 0.5_dl
 !  r0 = 1.5_dl*2._dl**0.5/delta; w0=2.**0.5
 !  phif=-1.; phit=1.
 
-  delta = 0.71_dl; meff = (2.*delta)**0.5
+  delta = 4._dl; meff = (2.*delta)**0.5
   r0 = 3._dl*2._dl**0.5*delta**0.5; w0=2.**0.5 ! This w0 should depend on delta since the mass does.  Fix it!!!!  This will also require adjusting the w used on my collocation grid.  easiest to just adjust wbase?
   phif = 0._dl; phit = pi
 
@@ -54,11 +54,6 @@ program Instanton
   call initialise_fields(.false.)
   call get_vacuum(phif); call get_vacuum(phit)
   print*,"vacua are ", phit, phif
-  if (delta > 0.7) then
-     phi = -2._dl*atan(exp((transform%xGrid-r0)*meff)) + pi ! For Drummond
-  else
-     phi = -0.5_dl*(phit-phif)*tanh((transform%xGrid-r0)/w0) + 0.5_dl*(phit+phif)
-  endif
      
   call solve(solv, phi)
   call output_simple(transform%xGrid,phi,.true.)
@@ -66,25 +61,33 @@ program Instanton
   !  call output()
 
 #ifdef FULL
+  open(unit=80,file='integrals.dat')
   do i=1,size(deltas)
      ! call bubble_params()
      ! call create_grid()
      ! call initialise_field() ! Add interpolation in here
      delta = deltas(i)
-     r0 = 3._dl*2._dl**0.5*delta**0.5; w0=2.**0.5
+     r0 = 3._dl*2._dl**0.5*delta**0.5; w0=2.**0.5; meff = (2._dl*delta)**0.5
      len=r0*3._dl**0.5; w=wbase / len
+     if (delta > 0.7) then
+        w = wbase/len/meff
+     else
+        w = wbase / len
+     endif
      print*,"w is ",w
      call destroy_chebyshev(transform)
      call create_grid(transform,order,w,len)
-     deallocate(l0)
+     deallocate(l0) ! This is really ugly.  Fix it up somehow
      call initialise_equations(transform,deltas(i))
-     phi = -0.5_dl*(phit-phif)*tanh((transform%xGrid-r0)/w0) + 0.5_dl*(phit+phif)
+     call initialise_fields(.false.)
      call solve(solv, phi)
-     call print_solver(solv)
-     call output_simple(transform%xGrid,phi,.false.)
+     !call print_solver(solv)
+     !call output_simple(transform%xGrid,phi,.false.)
      !instanton_prev(:) = instanton(:)
+     call get_action(phi,transform)
   enddo
 #endif
+  
   call delete_solver(solv)
   
 contains
@@ -210,6 +213,11 @@ contains
     if (prev) then
        phi(:) = phi_prev(:)
     else
+       if (delta > 0.7) then
+          phi = -2._dl*atan(exp((transform%xGrid-r0)*meff)) + pi ! For Drummond
+       else
+          phi = -0.5_dl*(phit-phif)*tanh((transform%xGrid-r0)/w0) + 0.5_dl*(phit+phif)
+       endif
 !       call thin_wall_profile()
     endif
   end subroutine initialise_fields
@@ -292,6 +300,7 @@ contains
     PE = quadrature(transform,(potential(fld)-potential(phif))*transform%xGrid(:)**3)
     
     print*,"integrals are",action,tension,KE,PE,0.5_dl*tension*r0**3
+    write(80,*) delta, action, tension, KE, PE, tension*r0**3
   end subroutine get_action
   
 end program instanton
