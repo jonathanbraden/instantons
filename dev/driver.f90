@@ -7,35 +7,39 @@ program Instanton
 
 ! Nonlinear Solver Parameters and storage.  To be moved to a separate module upon code cleanup
 !  type(Field_Model) :: model
-  type(Chebyshev) :: transform
+
+!  type(Chebyshev) :: transform
   type(Solver) :: solv
   real(dl), dimension(:), allocatable :: phi, phi_prev
   real(dl), dimension(:), allocatable :: model_params
 
   integer :: order, n
   real(dl) :: w, len  ! parameters controlling mapping of collocation grid
+  real(dl), parameter :: wbase = 1.5_dl
+  real(dl) :: meff
   integer :: i
 
   ! Move these parameters somewhere else
   real(dl) :: phit, phif,r0,w0
-
+  
   real(dl) :: delta
-  real(dl), dimension(1:10) :: deltas = (/ 0.51, 0.52, 0.55, 0.6, 0.7, 0.8, 0.9, 1., 2. ,4. /)
+  real(dl), dimension(1:15) :: deltas = (/ 0.50001, 0.5001, 0.501, 0.505, 0.51, 0.52, 0.55, 0.6, 0.7, 0.8, 0.9, 1., 2. , 3., 5. /)
 
   ! Values of double well
 !  delta = 0.5_dl
 !  r0 = 1.5_dl*2._dl**0.5/delta; w0=2.**0.5
 !  phif=-1.; phit=1.
 
-  delta = 8._dl
-  r0 = 3._dl*2._dl**0.5*delta**0.5; w0=2.**0.5
+  delta = 4._dl; meff = (2.*delta)**0.5
+  r0 = 3._dl*2._dl**0.5*delta**0.5; w0=2.**0.5 ! This w0 should depend on delta since the mass does.  Fix it!!!!  This will also require adjusting the w used on my collocation grid.  easiest to just adjust wbase?
   phif = 0._dl; phit = pi
 
   len = r0*3._dl**0.5
   
   order = 200; n=order+1
-  w = 0.25_dl
+  w = wbase/len/meff
   ! Initialise our derivatives and set up collocation grid
+  print*,"w is ",w
   call create_grid(transform,order,w,len)
 
   call create_solver(solv,n,100,0.1_dl)
@@ -46,22 +50,34 @@ program Instanton
   call initialise_fields(.false.)
   call get_vacuum(phif); call get_vacuum(phit)
   print*,"vacua are ", phit, phif
-  phi = -0.5_dl*(phit-phif)*tanh((transform%xGrid-r0)/w0) + 0.5_dl*(phit+phif)
-
+!  phi = -0.5_dl*(phit-phif)*tanh((transform%xGrid-r0)/w0) + 0.5_dl*(phit+phif)
+  phi = -2._dl*atan(exp((transform%xGrid-r0)*meff)) + pi ! For Drummond
+  
   call solve(solv, phi)
   call output_simple(transform%xGrid,phi,.true.)
-!  call output()
+  call get_action(phi,transform)
+  !  call output()
 
+#ifdef FULL
   do i=1,size(deltas)
      ! call bubble_params()
      ! call create_grid()
      ! call initialise_field() ! Add interpolation in here
+     delta = deltas(i)
+     r0 = 3._dl*2._dl**0.5*delta**0.5; w0=2.**0.5
+     len=r0*3._dl**0.5; w=wbase / len
+     print*,"w is ",w
+     call destroy_chebyshev(transform)
+     call create_grid(transform,order,w,len)
+     deallocate(l0)
+     call initialise_equations(transform,deltas(i))
      phi = -0.5_dl*(phit-phif)*tanh((transform%xGrid-r0)/w0) + 0.5_dl*(phit+phif)
      call solve(solv, phi)
+     call print_solver(solv)
      call output_simple(transform%xGrid,phi,.false.)
      !instanton_prev(:) = instanton(:)
   enddo
-
+#endif
   call delete_solver(solv)
   
 contains
@@ -161,16 +177,17 @@ contains
     logical, intent(in) :: init
     integer :: i, sz
     integer, parameter :: u = 60
-    real(dl), dimension(:), allocatable :: phi_spec, dphi
+    real(dl), dimension(:), allocatable :: phi_spec, dphi, d2phi
 
     if (init) open(unit=u,file='instanton.dat')
 
     sz = size(xvals)
-    allocate(phi_spec(sz), dphi(sz))
+    allocate(phi_spec(sz), dphi(sz), d2phi(sz) )
     phi_spec = matmul(transform%fTrans,phi) 
     dphi = matmul(transform%derivs(:,:,1),phi)
+    d2phi = matmul(transform%derivs(:,:,2),phi)
     do i=1,sz
-       write(u,*) xvals(i), phi(i), potential(phi(i)) - potential(phif), vdprime(phi(i)), dphi(i), phi_spec(i)
+       write(u,*) xvals(i), transform%weights(i-1), phi(i), potential(phi(i)) - potential(phif), vprime(phi(i)), vdprime(phi(i)), dphi(i), d2phi(i), phi_spec(i), transform%wFunc(i-1)
     enddo
     write(u,*)
   end subroutine output_simple
@@ -247,8 +264,27 @@ contains
   
   subroutine get_evectors()
   end subroutine get_evectors
-  
-  subroutine get_action()
+
+  !>@brief
+  !> Compute the instanton action given the transform grid and field values
+  subroutine get_action(fld,transform)
+    real(dl), dimension(:), intent(in) :: fld
+    type(Chebyshev), intent(in) :: transform
+    real(dl), dimension(1:size(fld)) :: dfld, lag
+    real(dl) :: action, tension, KE, PE
+    
+#ifdef USE_BLAS
+    call DGEMV()
+#else
+    dfld = matmul(transform%derivs(:,:,1),fld)
+#endif
+    lag = 0.5_dl*dfld**2 + potential(fld) - potential(phif)
+    action = quadrature(transform,lag*transform%xGrid(:)**3)
+    tension = quadrature(transform,dfld**2)
+    KE = quadrature(transform,0.5_dl*dfld**2*transform%xGrid(:)**3)
+    PE = quadrature(transform,(potential(fld)-potential(phif))*transform%xGrid(:)**3)
+    
+    print*,"integrals are",action,tension,KE,PE,0.5_dl*tension*r0**3
   end subroutine get_action
   
 end program instanton
