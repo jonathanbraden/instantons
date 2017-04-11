@@ -9,6 +9,14 @@
 !>
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+! Preprocessors for inlining
+!#define POTENTIAL(f) ( 0.25_dl*(f**2-1._dl)**2 + del*(f**3/3._dl-f) )
+!#define VPRIME(f) ( (f+del)*(f**2-1._dl) )
+!#define VDPRIME(f) ( 3._dl*f**2 - 1._dl + 2._dl*del*f )
+#define POTENTIAL(f) ( cos(f) + del*sin(f)**2 + 1._dl )
+#define VPRIME(f) ( -sin(f) + del*sin(2._dl*f) )
+#define VDPRIME(f) ( -cos(f) + 2._dl*del*cos(2._dl*f) )
+
 module Model
   use constants
   use Cheby
@@ -47,14 +55,6 @@ contains
     enddo
   end subroutine initialise_equations_scaled
 
-! Preprocessors for inlining
-!#define POTENTIAL(f) ( 0.25_dl*(f**2-1._dl)**2 + del*(f**3/3._dl-f) )
-!#define VPRIME(f) ( (f+del)*(f**2-1._dl) )
-!#define VDPRIME(f) ( 3._dl*f**2 - 1._dl + 2._dl*del*f )
-#define POTENTIAL(f) ( cos(f) + del*sin(f)**2 + 1._dl )
-#define VPRIME(f) ( -sin(f) + del*sin(2._dl*f) )
-#define VDPRIME(f) ( -cos(f) + 2._dl*del*cos(2._dl*f) )
-
   elemental function potential(phi)
     real(dl) :: potential
     real(dl), intent(in) :: phi
@@ -84,21 +84,6 @@ contains
     src(sz) = 0._dl  ! Set boundary condition at infinity
   end subroutine source
 
-  subroutine source_scaled(fld,src,scl,rvals)
-    real(dl), dimension(1:), intent(in) :: fld
-    real(dl), dimension(1:), intent(out) :: src
-    real(dl), intent(in) :: scl
-    real(dl), dimension(1:), intent(in) :: rvals
-    real(dl), dimension(:), allocatable :: ftmp
-    integer :: sz
-    
-    sz = size(fld); allocate( ftmp(sz) )
-    ftmp = fld / rvals**scl
-    src(:) = -matmul(L0,fld)
-    src(:) = src(:) + rvals**scl*VPRIME(ftmp)
-    deallocate(ftmp)
-  end subroutine source_scaled
-
   subroutine variation(fld,var)
     real(dl), dimension(1:), intent(in) :: fld
     real(dl), dimension(1:,1:), intent(out) :: var
@@ -113,6 +98,21 @@ contains
     var(sz,:) = 0._dl
     var(sz,sz) = 1._dl
   end subroutine variation
+
+  subroutine source_scaled(fld,src,scl,rvals)
+    real(dl), dimension(1:), intent(in) :: fld
+    real(dl), dimension(1:), intent(out) :: src
+    real(dl), intent(in) :: scl
+    real(dl), dimension(1:), intent(in) :: rvals
+    real(dl), dimension(:), allocatable :: ftmp
+    integer :: sz
+    
+    sz = size(fld); allocate( ftmp(sz) )
+    ftmp = fld / rvals**scl
+    src(:) = -matmul(L0,fld)
+    src(:) = src(:) + rvals**scl*VPRIME(ftmp)
+    deallocate(ftmp)
+  end subroutine source_scaled
 
   subroutine variation_scaled(fld,var,scl,rvals)
     real(dl), dimension(1:), intent(in) :: fld
