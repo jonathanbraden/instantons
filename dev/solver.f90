@@ -18,8 +18,8 @@ module Nonlinear_Solver
   use Model
   implicit none
 
-  real(dl), external :: dlange
-
+  real(dl), external :: DLANGE
+  
   type Solver_Storage
      integer, dimension(:), allocatable :: iwork
      real(dl), dimension(:), allocatable :: rwork
@@ -42,7 +42,6 @@ module Nonlinear_Solver
      type(Solver_Storage) :: mat_store
 #endif
   end type Solver
-
 
 !  abstract interface
 !     subroutine src(fld,eom)
@@ -73,7 +72,6 @@ contains
 #ifdef DEBUG_SOLVER
     call create_solver_storage(this%mat_store,n)
 #endif
-
     this%u = 99  ! Change this to a call to the next open solver
     open(unit=this%u,file='solver-output.dat')
   end subroutine create_solver
@@ -102,9 +100,10 @@ contains
     do i=1,this%maxIter
        call line_iteration(this,f_cur)
        call output_solver(this)
-       call print_solver(this)
-       if (stop_solver(this)) exit
+!       call print_solver(this)
+       if (stop_solver(this)) then; print*,"Converged in ",i," steps"; exit; endif
     enddo
+    call print_solver(this)   
     print*,""
     write(this%u,*) ""
   end subroutine solve
@@ -114,8 +113,9 @@ contains
   function stop_solver(this) result(test)
     type(Solver), intent(in) :: this
     logical :: test
-
-    test = (maxval(abs(this%S(:))) < 1.e-10) .and. (maxval(abs(this%del(:))) < 1.e-10)
+    real(dl), parameter :: eps = 1.e-10
+    
+    test = (maxval(abs(this%S(:))) < eps) .and. (maxval(abs(this%del(:))) < eps)
   end function stop_solver
 
   !>@brief
@@ -130,6 +130,29 @@ contains
 !    call eqn(this%L,this%S,phi_cur)
 !  end subroutine line_iteration
 
+  subroutine solve_radius(this,f_cur)
+    type(Solver), intent(inout) :: this
+    real(dl), dimension(:), intent(inout) :: f_cur
+    real(dl), dimension(:), allocatable :: f_prime
+
+    allocate(f_prime(1:size(f_cur)))
+    f_prime = matmul(transform%derivs(:,:,1),f_cur)
+    
+  end subroutine solve_radius
+
+  !>@brief
+  !> Decompose the proposed perturbation to the field into eigenmodes of the linear operator.
+  !> In particular, exctract the dependence of the current derivative of the solution,
+  !> corresponding to the collective mode associated with the overall bubble radius
+  subroutine decompose_perturbation(this)
+    type(Solver), intent(in) :: this
+
+    ! 1. Compute derivative of the current solution
+    ! 2. Get the eigenmodes of the linear operator
+    ! 3. Decompose the source into the eigenmodes (find the weight for orthogonality)
+    ! 4. Figure out what these modes correspond to
+  end subroutine decompose_perturbation
+  
   !>@brief
   !> Nonlinear solver based on Newton's method, with the extension to consider variable
   !> distances along the Newton iteration path to ensure the solution is converging
@@ -177,8 +200,6 @@ contains
        print*,"Error inverting linear matrix in solver"
        stop  ! Improve this error handling
     endif
-
-!    print*,"del vector is "; print*,this%del
 
     ! Why am I ever setting this thing here?
     b1 = res + this%kick_param ! If we're not converging, this allows us to kick ourselves
@@ -252,9 +273,12 @@ contains
   subroutine output_solver(this)
     type(Solver), intent(in) :: this
     integer :: i
-
+    real(dl), dimension(:), allocatable :: f_deriv
+    
+    allocate(f_deriv(1:size(this%f_prev)))
+    f_deriv = matmul(transform%derivs(:,:,1),this%f_prev)
     do i=1,this%nVar
-       write(this%u,*) this%f_prev(i), this%del(i), this%S(i), this%S_prev(i)
+       write(this%u,*) this%f_prev(i), this%del(i), this%S(i), this%S_prev(i), f_deriv(i)
     enddo
     write(this%u,*)
   end subroutine output_solver

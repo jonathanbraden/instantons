@@ -21,19 +21,24 @@ module Model
   use constants
   use Cheby
   implicit none
-
+  private :: L0, del
+  
   real(dl), dimension(:,:), allocatable :: L0
   real(dl) :: del
 
+  type(Chebyshev) :: transform  ! Get rid of this ugliness somehow ..., or make it private.  This fucks everything up.  Do I even need this anywhere?
+
 contains
-  subroutine initialise_equations(tForm, delta)
+  subroutine initialise_equations(tForm, delta, dim)
     type(Chebyshev), intent(in) :: tForm
     real(dl), intent(in) :: delta
+    integer, intent(in) :: dim
     integer :: i, sz
+    
     sz = size(tForm%xGrid)
-    allocate( L0(1:sz,1:sz) )
+    if (allocated(L0)) deallocate(L0); allocate( L0(1:sz,1:sz) )
     do i=0,sz-1
-       L0(i+1,:) = tForm%derivs(i,:,2) + 3._dl*tForm%derivs(i,:,1)/tForm%xGrid(i)
+       L0(i+1,:) = tForm%derivs(i,:,2) + dble(dim)*tForm%derivs(i,:,1)/tForm%xGrid(i)
     enddo
     del = delta
   end subroutine initialise_equations
@@ -46,12 +51,13 @@ contains
     real(dl) :: d, m
 
     sz = size(tForm%xGrid)
+    if (allocated(L0)) deallocate(L0)
     allocate( L0(1:sz,1:sz) )
-    d = dble(dim) - 1._dl - 2._dl*scl
-    m = scl*(scl+1._dl-dble(dim)+1._dl)
+    d = dble(dim) - 2._dl*scl
+    m = scl*(scl+1._dl-dble(dim))
     do i=0,sz-1
        L0(i+1,:) = tForm%derivs(i,:,2) + d*tForm%derivs(i,:,1)/tForm%xGrid(i)
-       L0(i+1,i+1) = L0(i+1,i+1) - m/tForm%xGrid(i)**2
+       L0(i+1,i+1) = L0(i+1,i+1) + m/tForm%xGrid(i)**2
     enddo
   end subroutine initialise_equations_scaled
 
@@ -72,6 +78,14 @@ contains
     real(dl), intent(in) :: phi
     vdprime =  VDPRIME(phi)
   end function vdprime
+
+  !>@brief
+  !> The unperturbed part of the potential used in computing the thin-wall domain wall
+  elemental function potential_tw(phi)
+    real(dl) :: potential_tw
+    real(dl), intent(in) :: phi
+    potential_tw = del*sin(phi)**2
+  end function potential_tw
   
   subroutine source(fld,src)
     real(dl), dimension(1:), intent(in) :: fld
@@ -86,7 +100,7 @@ contains
 
   subroutine variation(fld,var)
     real(dl), dimension(1:), intent(in) :: fld
-    real(dl), dimension(1:,1:), intent(out) :: var
+    real(dl), dimension(1:size(fld),1:size(fld)), intent(out) :: var
     integer :: i, sz
 
     sz = size(fld)
@@ -127,6 +141,7 @@ contains
 
     var(1:sz,1:sz) = L0(1:sz,1:sz)
     do i=1,sz
+       ! Hmm, I think this multiplication by rvals on the V'' term is wrong.  Which means scaled and unscaled versions are the same
        var(i,i) = var(i,i) - rvals(i)**scl*( VDPRIME(ftmp(i)) ) !- (3._dl*fld(i)**2-1._dl +2._dl*del*fld(i))
     enddo
     ! boundary condition at infinity

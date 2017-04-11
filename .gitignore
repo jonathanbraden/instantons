@@ -1,0 +1,13 @@
+# Ignore generated module and object files
+*.o
+*.mod
+
+# Ignore termporary backup files
+*~
+
+# Figures
+*.png
+*.pdf
+
+# Data files
+*.dat
