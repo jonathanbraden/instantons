@@ -10,13 +10,22 @@
 !>
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-!#define DEBUG_SOLVER 1
+#define DEBUG_SOLVER 1
 
 module Nonlinear_Solver
   use constants
   use Cheby
   use Model
   implicit none
+
+  real(dl), external :: dlange
+
+  type Solver_Storage
+     integer, dimension(:), allocatable :: iwork
+     real(dl), dimension(:), allocatable :: rwork
+     real(dl), dimension(:,:), allocatable :: lu_factor
+     real(dl), dimension(:), allocatable :: row_scale, col_scale
+  end type Solver_Storage
   
   type Solver
      integer :: nVar, u
@@ -34,12 +43,6 @@ module Nonlinear_Solver
 #endif
   end type Solver
 
-  type Solver_Storage
-     integer, dimension(:), allocatable :: iwork
-     real(dl), dimension(:), allocatable :: rwork
-     real(dl), dimension(:,:), allocatable :: lu_factor
-     real(dl), dimension(:), allocatable :: row_scale, col_scale
-  end type Solver_Storage
 
 !  abstract interface
 !     subroutine src(fld,eom)
@@ -68,7 +71,7 @@ contains
     allocate(this%ipiv(1:n))
     allocate(this%S_prev(1:n))
 #ifdef DEBUG_SOLVER
-    call create_solver_storate(this%mat_store,n)
+    call create_solver_storage(this%mat_store,n)
 #endif
 
     this%u = 99  ! Change this to a call to the next open solver
