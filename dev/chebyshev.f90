@@ -1,8 +1,3 @@
-! To do. Add a flag to do error checking for derivative orders, etc. that can be easily turned off when performance is important
-!
-! Implement integration of a function of the entire interval by inverting the derivative matrix
-! Then test that this thing actually works
-
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
 ! MODULE: Chebyshev
@@ -67,9 +62,10 @@
 !> Add all of the stretching and compressing transformations.
 !>
 !>@todo
-!> Add nice description of what this module is doing for the purposes of documentation
-!> When I'm doing the mappings, I currently have to first undo the transformation from spectral
+!>@arg Add nice description of what this module is doing for the purposes of documentation
+!>@arg When I'm doing the mappings, I currently have to first undo the transformation from spectral
 !> to real space, apply the change in derivatives, then transform back.  Fix this.
+!>@arg Flags for error checking of derivative orders for development purposes
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !#define USEBLAS  ! put this in a header
 
@@ -95,10 +91,45 @@ module Cheby
      real(dl), allocatable :: fTrans(:,:)
      real(dl), allocatable :: invTrans(:,:)
      real(dl), allocatable :: derivs(:,:,:)
+     real(dl), allocatable :: wFunc(:)
   end type Chebyshev
 
 contains
-  
+
+!#ifdef INCLUDE_FUNCTIONS
+  type(Chebyshev) function new_chebyshev_finite(ord,evens,w) result(tForm)
+    integer, intent(in) :: ord
+    logical, intent(in) :: evens
+    real(dl), intent(in), optional :: w
+
+    call create_chebyshev(tForm,ord,2,.false.,.false.)
+    if (evens) call transform_to_evens(tForm)
+    if (present(w)) call cluster_points(tForm,w,evens)
+  end function new_chebyshev_finite
+
+  type(Chebyshev) function new_chebyshev_semi_infinite(ord,len,w) result(tForm)
+    integer, intent(in) :: ord
+    real(dl), intent(in) :: len
+    real(dl), intent(in), optional :: w
+
+    tForm = new_chebyshev_finite(ord,.false.)
+    if (present(w)) call cluster_points(tForm,w,.false.)
+    call transform_semi_infinite(tForm,len)
+  end function new_chebyshev_semi_infinite
+
+  type(Chebyshev) function chebyshev_double_infinite(ord,len,evens,w) result(tForm)
+    integer, intent(in) :: ord
+    real(dl), intent(in) :: len
+    logical, intent(in) :: evens
+    real(dl), intent(in), optional :: w
+
+    tForm = new_chebyshev_finite(ord,.true.)
+    if (evens) call transform_to_evens(tForm)
+    if (present(w)) call cluster_points(tForm,w,evens)
+    call transform_double_infinite(tForm,len)
+  end function chebyshev_double_infinite
+!#endif
+
   !>@brief
   !> Create a Chebyshev transformation object to do polynomial approximation of order ord
   !>
@@ -137,9 +168,8 @@ contains
        this%invTrans(i,:) = BVals(:,0)
        this%derivs(i,:,1:nd) = BVals(:,1:nd)
     enddo
-
     ! Find a more elegant way to remove the dependence on end.
-    ! Probably easiest to achiever through numerical calculation of the polynomial norms
+    Call compute_basis_norms(this)
     call make_mmt(this,num_inv,end)
  
     !>@todo
@@ -152,6 +182,8 @@ contains
        this%derivs(:,:,i) = matmul(this%derivs(:,:,i),this%fTrans(:,:))
 #endif
     enddo
+
+    this%wFunc = sqrt(1._dl-this%xGrid(:)**2)  ! Move this somewhere else
   end subroutine create_chebyshev
 
   !>@brief
@@ -169,6 +201,8 @@ contains
     allocate( this%fTrans(0:ord,0:ord) )
     allocate( this%invTrans(0:ord,0:ord) )
     allocate( this%derivs(0:ord,0:ord,1:nd) )
+
+    allocate( this%wFunc(0:ord) )
   end subroutine allocate_chebyshev
     
   !>@brief
@@ -215,7 +249,6 @@ contains
   subroutine compute_basis_norms(this)
     type(Chebyshev), intent(inout) :: this
     integer :: i
-
     do i=0,this%ord
        this%norm(i) = sum(this%weights(:)*this%invTrans(:,i)**2)
     enddo
@@ -276,16 +309,12 @@ contains
     
     ord = this%ord
     if (num_inv) then
-       ! Fill in code to numerically invert the inverse transform
-       print*,"Warning, numerical calculation of MMT through matrix inversion not yet implemented"
        call invert_matrix(this%invTrans,this%fTrans,this%nx)
     else
        do i=0,ord
-          this%fTrans(:,i) = this%weights(:)*this%invTrans(:,i)
+          this%fTrans(:,i) = this%weights(:)*this%invTrans(:,i)/this%norm(i)
        enddo
-       this%fTrans(:,0) = 0.5_dl*this%fTrans(:,0)
        this%fTrans = transpose(this%fTrans)
-       if (end) this%fTrans(ord,:) = 0.5_dl*this%fTrans(ord,:)
     endif    
   end subroutine make_mmt
   
@@ -304,6 +333,9 @@ contains
 
   !>@brief
   !> Evaluate the given function via numerical quadrature
+  !>
+  !>@todo
+  !>@arg For the chebyshev, implement this more efficiently since the weights are trivial
   real(dl) function quadrature(this,fVals) result(quad)
     type(Chebyshev), intent(in) :: this
     real(dl), dimension(:), intent(in) :: fVals
@@ -314,7 +346,12 @@ contains
        print*,"Error, size of function and order of polynomial expansion are incompatible"
     endif
 #endif
-    quad = sum(this%weights(:)*fVals(:))
+    quad = sum(this%weights(:)*this%wFunc(:)*fVals(:))
+
+#ifdef FAST_QUAD
+    quad = sum(fVals(:))
+    quad = quad*(pi/dble(order))
+#endif
   end function quadrature
 
   !>@brief
@@ -470,10 +507,12 @@ contains
 
   !>@brief
   !> Interpolate the given function off of the collocation grid
-  subroutine interpolate(fVals,xNew,fNew)
-    real(dl), intent(in) :: fvals(:), xNew(:)
+  subroutine interpolate(this,fVals,xNew,fNew)
+    type(Chebyshev), intent(in) :: this
+    real(dl), intent(in) :: fVals(:), xNew(1:)
     real(dl), intent(out) :: fNew(:)
-    integer :: n, i
+    integer :: n,o, i
+    real(dl), allocatable :: B_tmp(:,:), spec(:)
 
     ! Add error check to make sure xNew and fNew are the same size
     ! Make sure that the indexing of xNew actually starts at 1 when it's defined implicitly
@@ -481,9 +520,16 @@ contains
 
     fNew = 0._dl
     
-    n = size(xNew)
+    n = size(xNew); o = this%ord
+    allocate(B_tmp(0:o,0:2)); allocate(spec(0:o))
+#ifdef USEBLAS
+    call DGEMV
+#else
+    spec = matmul(this%fTrans,fVals)
+#endif
     do i=1,n
-!       fNew(i) = sum()  ! use evaluate_chebyshev
+       call evaluate_chebyshev(o,xNew(i),B_tmp,0)
+       fNew(i) = sum(B_tmp(0:o,0)*spec(0:o))  ! use evaluate_chebyshev
     enddo
   end subroutine interpolate
 
@@ -509,7 +555,8 @@ contains
        x(i) = -dcos( dble(2*i+1)*dkcol )
     enddo
     print*,""
-    w = 2._dl / dble(order+1)
+    !w = 2._dl / dble(order+1)  ! wrong one
+    w = 1._dl*pi / dble(order+1)
   end subroutine chebyshev_gauss_nodes
 
   !>@brief
@@ -528,10 +575,9 @@ contains
     dkcol = pi  / dble(order)
     do i=0,order
        x(i) = -dcos(dble(i)*dkcol)
-!       print*,"Lobatto node is ",x(i),cos(dble(order)*acos(x(i)))
     enddo
-    w = 2._dl / dble(order)
-    w(0) = 1._dl / dble(order); w(order) = 1._dl / dble(order)
+    w = 1._dl*pi / dble(order)
+    w(0) = 0.5_dl*pi / dble(order); w(order) = 0.5_dl*pi / dble(order)
   end subroutine chebyshev_lobatto_nodes
 
   !>@brief
@@ -641,7 +687,10 @@ contains
   !>  \f[
   !>    y(x) = L\frac{1+x}{1-x}
   !>  \f]
-  !>
+  !> or
+  !>  \f[
+  !>    x(y) = \frac{r-L}{r+L}
+  !>  \f]
   !>@param[in,out] this
   !>@param[in] len  The length parameter \f$L\f$ in the transformation
   subroutine transform_semi_infinite(this, len)
@@ -653,8 +702,8 @@ contains
     ord = this%ord
     this%xGrid(:) = len*( (1._dl+this%xGrid(:))/(1._dl-this%xGrid(:)) )
     allocate( dmap(0:this%ord,this%nDeriv) )
-    dmap(:,1) = 0._dl
-    dmap(:,2) = 0._dl
+    dmap(:,1) = 2._dl*len / (len+this%xGrid)**2
+    dmap(:,2) = -4._dl*len / (len+this%xGrid)**3
     
     call transform_derivatives(this,dmap)
     deallocate(dmap)
@@ -742,11 +791,17 @@ contains
   !> Since differentiation via Chebyshev pseudospectral expansion is mildly ill-conditioned,
   !> only low order derivatives should be computed in this manner.
   !>
+  !> Furthermore, in order to facilitate numerical quadrature calculations, the volume transformation encoded in the Jacobian is folded into the width calculation, so the new weights are
+  !> \f[
+  !>   \tilde{w}_i = \frac{dx_{new}}{dx_{old}}(x_{old,i})w_i
+  !>  \f]
+  !>
   !>@param[in,out] this
   !>@param[in]  dmap  An array storing the derivatives up to the maximal derivative order in this
   !>
   !>@todo
   !>@arg Extend to higher than second order derivatives
+  !>@arg Implement the weighting recalculation.
   subroutine transform_derivatives(this,dmap)
     type(Chebyshev), intent(inout) :: this
     real(dl), dimension(:,:), intent(in) :: dmap
@@ -778,6 +833,7 @@ contains
     do j=1,nd
        this%derivs(:,:,j) = matmul(this%derivs(:,:,j),this%fTrans(:,:))
     enddo
+    this%weights = this%weights / dmap(:,1)
   end subroutine transform_derivatives
 
   !>@brief

@@ -19,7 +19,7 @@ program Instanton
 
   integer :: order, n
   real(dl) :: w, len  ! parameters controlling mapping of collocation grid
-  real(dl), parameter :: wbase = 10._dl
+  real(dl), parameter :: wbase = 20._dl
   real(dl) :: meff
   integer :: i
 
@@ -29,23 +29,28 @@ program Instanton
   
   real(dl) :: delta
 !  real(dl), dimension(1:18) :: deltas = [ 500., 200., 100., 50., 20., 10., 5., 2., 1., 0.8, 0.6, 0.55, 0.52, 0.51, 0.505, 0.501, 0.5001, 0.50001 ]
-  real(dl), dimension(1:2) :: deltas = [ 0.6, 0.8 ]
+!  real(dl), dimension(1:2) :: deltas = [ 0.6, 0.8 ]
+  real(dl), dimension(1:20) :: deltas
   
   real(dl), dimension(100) :: rnew, phinew
   rnew = (/ (0.5*i, i=1,100) /)
+
+  deltas = [ (0.3*(i-1), i=1,20) ]
+  deltas = 0.51_dl + 0.1*exp(deltas)
   
   ! Values for double well
 !  delta = 0.5_dl
 !  r0 = 1.5_dl*2._dl**0.5/delta; w0=2.**0.5
 !  phif=-1.; phit=1.
 
-  delta = 2._dl
+  delta = 10._dl
   
   phif = 0._dl; phit = pi
   order = 100; n=order+1
-  r0 = 3._dl*2._dl**0.5*delta**0.5
+  r0 = 3._dl*(2._dl*delta)**0.5
   meff = (2.*delta)**0.5*(1._dl-0.25_dl/delta**2)**0.5
-  len = r0*3._dl**0.5; w = wbase / len/ meff
+!  len = r0*3._dl**0.5; w = wbase / len/ meff
+  len = r0; w = wbase / len/ meff
   
   ! Initialise our derivatives and set up collocation grid
   call create_grid(transform,order,w,len)
@@ -54,7 +59,7 @@ program Instanton
 !  call create_model(model)
 
   allocate(phi(0:order),phi_prev(0:order))  ! This is ugly, fix it to allow for varying orders
-  call initialise_fields(phi,.false.)
+  call initialise_fields(phi,delta,.false.)
   ! Move this vacuum solving somewhere else
   call get_vacuum(phif); call get_vacuum(phit)
   print*,"vacua are ", phit, phif
@@ -81,13 +86,13 @@ program Instanton
      len=r0*3._dl**0.5; w = wbase/len/meff
      call destroy_chebyshev(transform)
      call create_grid(transform,order,w,len)
-     call initialise_equations(transform,deltas(i),3)
+     call initialise_equations(transform,delta,3)
 !     if (meff*r0 < 2._dl) then
      if (.false.) then
         print*,"using prev, for delta = ", delta
         phi = interpolate_instanton(transform%xGrid,phi_prev,transform,l_old,w_old) ! Need to store old transform
      else
-        call initialise_fields(phi,.false.)
+        call initialise_fields(phi,delta,.false.)
      endif
      call solve(solv, phi)
      !call print_solver(solv)
@@ -108,7 +113,6 @@ contains
     integer, intent(in) :: order
     real(dl), dimension(0:order), optional :: phi_init
     real(dl), dimension(0:order) :: phi
-    
   end function instanton_profile
   
   !>@brief
@@ -125,7 +129,7 @@ contains
     real(dl) :: r0, w0, meff  ! Bubble Parameters
     real(dl) :: phif, phit    ! Move this elsewhere
     integer :: n
-
+    
     n = order+1
 
 !    call get_minima(phif,phit)
@@ -146,10 +150,11 @@ contains
     call create_solver(solv,n,100,0.1_dl)
     call initialise_equations(transform,delta,3)
 
+    ! Modularise this part
     if (present(phi_init)) then
        phi(0:order) = phi_init(0:order)
     else
-       call initialise_fields(phi,.false.)  ! Replace this with a call to thin-wall profile or something
+       call initialise_fields(phi,delta,.false.)  ! Replace this with a call to thin-wall profile or something
     endif
     call solve(solv,phi)
     print*,eval_action(phi,transform,3,r0)
@@ -158,24 +163,113 @@ contains
 !    call destroy_chebyshev(transform)
   end subroutine compute_profile
 
-  subroutine scan_profiles(deltas)
-    real(dl), dimension(:), intent(in) :: deltas
-    real(dl) :: del; integer :: i
+  subroutine initial_profile(phi,delta,phi_prev)
+    type(Solution), intent(out) :: phi, phi_prev
+    real(dl), intent(in) :: delta
+    real(dl) :: r0, meff
+
+    r0 = 3._dl*(delta*2._dl)**0.5
+    meff = (delta*2._dl)**0.5*(1._dl-0.25/delta**2)**0.5
+!    if (meff*r0 < 1.) then
+    if (.false.) then
+    ! Add interpolation and condition above
+    else
+       call breather_profile(phi%tForm%xGrid,phi%phi,r0,1./meff)  ! ugly nonlocality with transform
+    endif
+       
+  end subroutine initial_profile
+  
+  !>@brief
+  !> Initialise our initial guess for the instanton profile
+  !>
+  !>@param[in] prev  If True - initialise profile using previous numerical profile
+  !>                 If False - initialise using an analytic formula
+  subroutine initialise_fields(phi_i,delta,prev)
+    real(dl), dimension(:), intent(out) :: phi_i
+    real(dl), intent(in) :: delta
+    logical, intent(in) :: prev
+    real(dl) :: r0, meff
     
-    do i=1,size(deltas)
-       del = deltas(i)
-    enddo
-  end subroutine scan_profiles
+    if (prev) then
+       phi(:) = phi_prev(:) ! ugly nonlocality
+    else
+       r0 = 3._dl*(2.*delta)**0.5
+       meff = (2.*delta)**0.5*(1._dl-0.25_dl/delta**2)**0.5
+!       if (delta > 0.7) then
+!          phi = -2._dl*atan(exp((transform%xGrid-r0)*meff)) + pi ! For Drummond
+!       else
+!          phi = -0.5_dl*(phit-phif)*tanh((transform%xGrid-r0)/w0) + 0.5_dl*(phit+phif)
+!       endif
+       !       call thin_wall_profile()
+       if (meff*r0 < 100.) then
+          phi = -2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*transform%xGrid)) ! Brutal nonlocality
+       else
+          phi = -2._dl*atan(exp((transform%xGrid-r0)*meff)) + pi
+       endif
+    endif
+  end subroutine initialise_fields
+
+  !>@brief
+  !> Compute the thin wall profile.  This will be more easily stored in the model subroutine
+  subroutine thin_wall_profile(rvals,phi,r0,w0,phit,phif)
+    real(dl), dimension(:), intent(in) :: rvals
+    real(dl), dimension(:), intent(out) :: phi
+    real(dl), intent(in) :: r0, w0, phit, phif
+    
+    !phi = -0.5_dl*(phit-phif)*tanh((rvals-r0)/w0) + 0.5_dl*(phit+phif)
+    phi = -2._dl*atan(exp((rvals-r0)/w0)) + pi
+  end subroutine thin_wall_profile
+
+  subroutine breather_profile(rvals,phi,r0,w0)
+    real(dl), dimension(:), intent(in) :: rvals
+    real(dl), dimension(:), intent(out) :: phi
+    real(dl), intent(in) :: r0,w0
+    real(dl) :: meff
+
+    meff = 1._dl/20
+    phi = -2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*rvals))
+  end subroutine breather_profile
+  
+  !>@brief
+  !> Compute the radius and width of the thin-wall using the tension, vacuum splitting and number of dimensions
+  subroutine thin_wall_params(rinit,width,sigma,drho,dim)
+    real(dl), intent(out) :: rinit, width
+    real(dl), intent(in) :: sigma, drho
+    integer, intent(in) :: dim
+
+    rinit = dble(dim)*sigma / drho
+    width = 0._dl  ! Make this actually work
+  end subroutine thin_wall_params
+
+  subroutine bubble_parameters(delta,r0,w0,meff)
+    real(dl), intent(in) :: delta
+    real(dl), intent(out) :: r0, w0, meff
+
+    meff = (2._dl*delta)**0.5*(1._dl-0.25/delta**2)**0.5
+    r0 = 3._dl*(2._dl*delta)**0.5
+    w0 = 1._dl/(2._dl*delta)**0.5  ! Adjust as necessary
+  end subroutine bubble_parameters
   
   subroutine bubble_params(delta,r0,w0,len,w)
     real(dl), intent(in) :: delta
     real(dl), intent(out) :: r0, w0, len, w
+    real(dl) :: meff
+    meff = (2._dl*delta)**0.5*(1._dl-0.25_dl/delta**2)**0.5
     r0 = 3._dl*(2._dl*delta)**0.5
-    w0 = 1._dl/(2._dl*delta)**0.5  ! fix this.  Depends on delta in my writing of the potential
+    w0 = 1._dl/meff  ! fix this.  Depends on delta in my writing of the potential
+
     len = r0*3._dl**0.5
     w = w0/len  ! Adjust this
   end subroutine bubble_params
 
+  subroutine grid_params(w,len,r0,w0)
+    real(dl), intent(out) :: w, len
+    real(dl), intent(in) :: r0,w0
+    real(dl), parameter :: wscl = 10._dl
+    len = r0*3._dl**0.5
+    w = wscl * w0 / len 
+  end subroutine grid_params
+  
   subroutine create_grid(tForm,ord,w,l)
     type(Chebyshev), intent(out) :: tForm
     integer, intent(in) :: ord
@@ -224,6 +318,9 @@ contains
    
   end subroutine get_evalues
 
+  subroutine get_evectors()
+  end subroutine get_evectors
+  
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! Delete the stuff up until the end of delete
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -303,62 +400,7 @@ contains
     enddo
     write(u,*)
   end subroutine output
-  
-  !>@brief
-  !> Initialise our initial guess for the instanton profile
-  !>
-  !>@param[in] prev  If True - initialise profile using previous numerical profile
-  !>                 If False - initialise using an analytic formula
-  subroutine initialise_fields(phi_i,prev)
-    real(dl), dimension(:), intent(out) :: phi_i
-    logical, intent(in) :: prev
-
-    if (prev) then
-       phi(:) = phi_prev(:) ! ugly nonlocality
-    else
-       if (delta > 0.7) then
-          phi = -2._dl*atan(exp((transform%xGrid-r0)*meff)) + pi ! For Drummond
-       else
-          phi = -0.5_dl*(phit-phif)*tanh((transform%xGrid-r0)/w0) + 0.5_dl*(phit+phif)
-       endif
-!       call thin_wall_profile()
-    endif
-  end subroutine initialise_fields
-
-  !>@brief
-  !> Compute the thin wall profile.  This will be more easily stored in the model subroutine
-  subroutine thin_wall_profile(rvals,phi,r0,w0,phit,phif)
-    real(dl), dimension(:), intent(in) :: rvals
-    real(dl), dimension(:), intent(out) :: phi
-    real(dl), intent(in) :: r0, w0, phit, phif
     
-    !phi = -0.5_dl*(phit-phif)*tanh((rvals-r0)/w0) + 0.5_dl*(phit+phif)
-    phi = -2._dl*atan(exp((rvals-r0)/w0)) + pi
-  end subroutine thin_wall_profile
-
-  !>@brief
-  !> Compute the radius and width of the thin-wall using the tension, vacuum splitting and number of dimensions
-  subroutine thin_wall_params(rinit,width,sigma,drho,dim)
-    real(dl), intent(out) :: rinit, width
-    real(dl), intent(in) :: sigma, drho
-    integer, intent(in) :: dim
-
-    rinit = dble(dim)*sigma / drho
-    width = 0._dl  ! Make this actually work
-  end subroutine thin_wall_params
-
-  subroutine bubble_parameters(delta,r0,w0,meff)
-    real(dl), intent(in) :: delta
-    real(dl), intent(out) :: r0, w0, meff
-
-    meff = (2._dl*delta)**0.5*(1._dl-0.25/delta**2)**0.5
-    r0 = 3._dl*(2._dl*delta)**0.5
-    w0 = 1._dl/(2._dl*delta)**0.5  ! Adjust as necessary
-  end subroutine bubble_parameters
-    
-  subroutine get_evectors()
-  end subroutine get_evectors
-
   !>@brief
   !> Compute the instanton action given the transform grid and field values
   subroutine get_action(fld,transform)

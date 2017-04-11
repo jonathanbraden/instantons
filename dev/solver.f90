@@ -100,9 +100,10 @@ contains
     do i=1,this%maxIter
        call line_iteration(this,f_cur)
        call output_solver(this)
-       call print_solver(this)
+!       call print_solver(this)
        if (stop_solver(this)) then; print*,"Converged in ",i," steps"; exit; endif
     enddo
+    call print_solver(this)   
     print*,""
     write(this%u,*) ""
   end subroutine solve
