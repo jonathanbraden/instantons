@@ -93,6 +93,7 @@ module Cheby
      real(dl), allocatable :: invTrans(:,:)
      real(dl), allocatable :: derivs(:,:,:)
      real(dl), allocatable :: wFunc(:)
+     real(dl) :: len, scl
   end type Chebyshev
 
 !  abstract interface 
@@ -153,6 +154,8 @@ contains
     real(dl) :: x, BVals(0:ord,0:nd) ! figure out how to remove the ugly temporary BVals
     integer :: i
 
+    this%len = -1._dl; this%scl = 1._dl
+    
     call allocate_chebyshev(this, ord, nd)
 
     ! Get the collocation points
@@ -679,6 +682,7 @@ contains
     real(dl), dimension(:,:), allocatable :: dmap
     integer :: ord
 
+    this%len = len
     ord = this%ord
     this%xGrid(:) = len*this%xGrid(:) / sqrt(1._dl - this%xGrid(:)**2)
 
@@ -705,7 +709,8 @@ contains
     real(dl), intent(in) :: len
     integer :: ord
     real(dl), dimension(:,:), allocatable :: dmap
-    
+
+    this%len = len
     ord = this%ord
     this%xGrid(:) = len*( (1._dl+this%xGrid(:))/(1._dl-this%xGrid(:)) )
     allocate( dmap(0:this%ord,this%nDeriv) )
@@ -746,7 +751,8 @@ contains
     real(dl), allocatable :: xshift(:), dmap(:,:)
 
     print*,"Point clustering not yet fully tested"
-    
+
+    this%scl = w
     allocate( xshift(0:this%ord) ); allocate( dmap(0:this%ord,1:this%nDeriv) )
     winv = 1._dl / w
 
