@@ -85,6 +85,7 @@ module Cheby
   !>@todo
   !> norm - Stores normalisation of orthogonal polynomials (needed to generate transformation matrix)
   !> wVals - Weights to be used in quadrature integrations
+  !> inv_coord_trans - Store the coordinate transform matrix for future use
   type Chebyshev
      integer :: nx, ord, nDeriv
      real(dl), allocatable :: xGrid(:), weights(:), norm(:)
@@ -93,6 +94,12 @@ module Cheby
      real(dl), allocatable :: derivs(:,:,:)
      real(dl), allocatable :: wFunc(:)
   end type Chebyshev
+
+!  abstract interface 
+!     real(dl) function xnew(x) 
+!       real(dl), intent(in) :: x
+!     end function xnew
+!  end interface
 
 contains
 
@@ -147,7 +154,7 @@ contains
     integer :: i
 
     call allocate_chebyshev(this, ord, nd)
-    
+
     ! Get the collocation points
     if (end) then
        call chebyshev_lobatto_nodes(this%xGrid,this%weights,this%ord)

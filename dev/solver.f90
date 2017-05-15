@@ -10,7 +10,7 @@
 !>
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-!#define DEBUG_SOLVER 1
+#define DEBUG_SOLVER 1
 
 module Nonlinear_Solver
   use constants
