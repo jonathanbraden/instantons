@@ -8,6 +8,9 @@ program Instanton
 ! Nonlinear Solver Parameters and storage.  To be moved to a separate module upon code cleanup
 !  type(Field_Model) :: model
 
+  type(Chebyshev) :: transTmp  ! Remove this when debugging is done.  Used to adjust profile
+  real(dl) :: wold, lold
+  
   type Solution
      type(Chebyshev) :: tForm
      real(dl), dimension(:), allocatable :: phi
@@ -32,8 +35,7 @@ program Instanton
 !  real(dl), dimension(1:2) :: deltas = [ 0.6, 0.8 ]
   real(dl), dimension(1:20) :: deltas
   
-  real(dl), dimension(100) :: rnew, phinew
-  rnew = (/ (0.5*i, i=1,100) /)
+  real(dl), dimension(101) :: rnew, phinew
 
   deltas = [ (0.3*(i-1), i=1,20) ]
   deltas = 0.51_dl + 0.1*exp(deltas)
@@ -43,14 +45,14 @@ program Instanton
 !  r0 = 1.5_dl*2._dl**0.5/delta; w0=2.**0.5
 !  phif=-1.; phit=1.
 
-  delta = 10._dl
+  delta = 0.55_dl
   
   phif = 0._dl; phit = pi
   order = 100; n=order+1
   r0 = 3._dl*(2._dl*delta)**0.5
   meff = (2.*delta)**0.5*(1._dl-0.25_dl/delta**2)**0.5
 !  len = r0*3._dl**0.5; w = wbase / len/ meff
-  len = r0; w = wbase / len/ meff
+  len = r0*3._dl**0.5; w = wbase / len / meff
   
   ! Initialise our derivatives and set up collocation grid
   call create_grid(transform,order,w,len)
@@ -64,20 +66,58 @@ program Instanton
   call get_vacuum(phif); call get_vacuum(phit)
   print*,"vacua are ", phit, phif
 
+  open(unit=70,file='init_cond.dat')
+  do i=0,order
+     write(70,*) transform%xgrid(i), phi(i)
+  enddo
+  write(70,*) ""
+  
   call solve(solv, phi)
   call output_simple(transform,phi,.true.)
   call get_action(phi,transform)
   print*,eval_action(phi,transform,3,r0)
 
 !  call destroy_chebyshev(transform); call delete_solver(solv)
-  call compute_profile(delta,order,phi)
-  
+!  call compute_profile(delta,order,phi)
+
+!  rnew = (/ (0.5*i, i=1,size(rnew)) /)
 !  phinew = interpolate_instanton(rnew,phi,transform,len,w)
-!  open(unit=70,file='interpolate.dat')
+!  open(unit=110,file='interpolate.dat')
 !  do i=1,100
-!     write(70,*) rnew(i), phinew(i)
+!     write(110,*) rnew(i), phinew(i)
 !  enddo
+!  write(110,*) ""
+
+  wold = w; lold = len
+  delta = 0.54
+  r0 = 3._dl*(2._dl*delta)**0.5
+  meff = (2.*delta)**0.5*(1._dl-0.25_dl/delta**2)**0.5
+  meff = (2.*delta)**0.5
+  len = r0*3._dl**0.5; w = wbase / len / meff
   
+  call create_grid(transTmp,order,w,len)
+
+  phinew = interpolate_instanton(transTmp%xGrid,phi,transform,lold,wold)
+  phi = phinew
+  do i=0,order
+     write(70,*) transform%xgrid(i), phi(i)
+  enddo
+  write(70,*) ""
+  close(70)
+  
+  call destroy_chebyshev(transform)
+  call create_grid(transform,order,w,len)
+  call initialise_equations(transform,delta,3)
+  
+  call solve(solv, phi)
+  call output_simple(transform,phi,.true.)
+  
+!  call scan_profiles()
+  call delete_solver(solv)
+  
+contains
+
+  subroutine scan_profiles()
   open(unit=80,file='integrals.dat')
   do i=1,size(deltas)
      delta = deltas(i)
@@ -101,11 +141,8 @@ program Instanton
      write(80,*) delta, eval_action(phi,transform,3,r0)
      w_old = w; l_old = len; phi_prev = phi
   enddo
+  end subroutine scan_profiles
   
-  call delete_solver(solv)
-  
-contains
-
   !>@todo
   !>@arg Write this.  It will have identical functionality to the compute_profile subroutine, just with a function return.  For easiest maintainability, probably easiest to just call the subroutine
   function instanton_profile(delta,order,phi_init) result(phi)
@@ -457,6 +494,7 @@ contains
     ! Add in the "thin-wall potential" here
   end function eval_action
 
+  ! This doesn't seem to be working yet
   function interpolate_instanton(r_new,f_cur,tForm,L,w) result(f_int)
     real(dl), dimension(:), intent(in) :: r_new, f_cur
     type(Chebyshev), intent(in) :: tForm
@@ -469,6 +507,7 @@ contains
     xvals = r_new / sqrt(r_new**2+L**2)
     xvals = atan(winv*tan(pi*(xvals-0.5_dl)))/pi + 0.5_dl
     xvals = 2._dl*xvals**2-1._dl
+
 #ifdef USEBLAS
 
 #else
