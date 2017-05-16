@@ -8,8 +8,7 @@ program Instanton
 ! Nonlinear Solver Parameters and storage.  To be moved to a separate module upon code cleanup
 !  type(Field_Model) :: model
 
-  type(Chebyshev) :: transTmp  ! Remove this when debugging is done.  Used to adjust profile
-  real(dl) :: wold, lold
+  real(dl), dimension(:), allocatable :: xNew
   
   type Solution
      type(Chebyshev) :: tForm
@@ -22,7 +21,7 @@ program Instanton
 
   integer :: order, n
   real(dl) :: w, len  ! parameters controlling mapping of collocation grid
-  real(dl), parameter :: wbase = 20._dl
+  real(dl), parameter :: wbase = 10._dl !20._dl
   real(dl) :: meff
   integer :: i
 
@@ -46,104 +45,217 @@ program Instanton
 !  r0 = 1.5_dl*2._dl**0.5/delta; w0=2.**0.5
 !  phif=-1.; phit=1.
 
-  delta = 0.55_dl
+!  delta = 0.54_dl
+  delta = 0.56_dl
   
   phif = 0._dl; phit = pi
   order = 100; n=order+1
   r0 = 3._dl*(2._dl*delta)**0.5
-  meff = (2.*delta)**0.5*(1._dl-0.25_dl/delta**2)**0.5
-!  len = r0*3._dl**0.5; w = wbase / len/ meff
+  meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
   len = r0*3._dl**0.5; w = wbase / len / meff
   
   ! Initialise our derivatives and set up collocation grid
   call create_grid(transform,order,w,len)
-  call create_solver(solv,n,100,0.1_dl)
-  call initialise_equations(transform,delta,3)
+!  call create_solver(solv,n,100,0.1_dl)
+!  call initialise_equations(transform,delta,3)
 !  call create_model(model)
 
-!  call set_bubble_params(bubble,phit,phif,phit,,,3)
-
   allocate(phi(0:order),phi_prev(0:order))  ! This is ugly, fix it to allow for varying orders
-  call initialise_fields(phi,delta,.false.)
+!  call initialise_fields(phi,delta,.false.)
   ! Move this vacuum solving somewhere else
-  call get_vacuum(phif); call get_vacuum(phit)
-  print*,"vacua are ", phit, phif
-
-  open(unit=70,file='init_cond.dat')
-  do i=0,order
-     write(70,*) transform%xgrid(i), phi(i)
-  enddo
-  write(70,*) ""
+!  call get_vacuum(phif); call get_vacuum(phit)
+!  print*,"vacua are ", phit, phif
   
-  call solve(solv, phi)
-  call output_simple(transform,phi,.true.)
-  call get_action(phi,transform)
-  print*,eval_action(phi,transform,3,r0)
+!  call solve(solv, phi)
+!  call output_simple(transform,phi,.true.)
+!  call get_action(phi,transform)
+!  print*,eval_action(phi,transform,3,r0)
 
-!  call destroy_chebyshev(transform); call delete_solver(solv)
-!  call compute_profile(delta,order,phi)
+  call compute_profile(delta,order,phi)
 
-!  rnew = (/ (0.5*i, i=1,size(rnew)) /)
-!  phinew = interpolate_instanton(rnew,phi,transform,len,w)
-!  open(unit=110,file='interpolate.dat')
-!  do i=1,100
-!     write(110,*) rnew(i), phinew(i)
-!  enddo
-!  write(110,*) ""
-
-  wold = w; lold = len
-  delta = 0.54
+  delta = 0.52
   r0 = 3._dl*(2._dl*delta)**0.5
-  meff = (2.*delta)**0.5*(1._dl-0.25_dl/delta**2)**0.5
-  meff = (2.*delta)**0.5
+  meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
   len = r0*3._dl**0.5; w = wbase / len / meff
-  
-  call create_grid(transTmp,order,w,len)
 
-  phinew = interpolate_instanton(transTmp%xGrid,phi,transform,lold,wold)
-  phi = phinew
-  do i=0,order
-     write(70,*) transform%xgrid(i), phi(i)
-  enddo
-  write(70,*) ""
-  close(70)
+  allocate(xNew(0:order))
+  xNew = chebyshev_grid(order,len,w)
+  phi_prev = interpolate_instanton(xNew,phi,transform)
+  call compute_profile(delta,order,phi,phi_prev)
+
+  delta = 0.51
+  r0 = 3._dl*(2._dl*delta)**0.5
+  meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
+  len = r0*3._dl**0.5; w = wbase / len / meff
+
+  xNew = chebyshev_grid(order,len,w)
+  phi_prev = interpolate_instanton(xNew,phi,transform)
+  call compute_profile(delta,order,phi,phi_prev)
+
+  delta = 0.505
+  r0 = 3._dl*(2._dl*delta)**0.5
+  meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
+  len = r0*3._dl**0.5; w = wbase / len / meff
+
+  xNew = chebyshev_grid(order,len,w)
+  phi_prev = interpolate_instanton(xNew,phi,transform)
+  call compute_profile(delta,order,phi,phi_prev)
+
+  delta = 0.501
+  r0 = 3._dl*(2._dl*delta)**0.5
+  meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
+  len = r0*3._dl**0.5; w = wbase / len / meff
+
+  xNew = chebyshev_grid(order,len,w)
+  phi_prev = interpolate_instanton(xNew,phi,transform)
+  call compute_profile(delta,order,phi,phi_prev)
+
+  delta = 0.5001
+  r0 = 3._dl*(2._dl*delta)**0.5
+  meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
+  len = r0*3._dl**0.5; w = wbase / len / meff
+
+  xNew = chebyshev_grid(order,len,w)
+  phi_prev = interpolate_instanton(xNew,phi,transform)
+  call compute_profile(delta,order,phi,phi_prev)
+
+ 
+  delta = 0.50005
+  r0 = 3._dl*(2._dl*delta)**0.5
+  meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
+  len = r0*3._dl**0.5; w = wbase / len / meff
+
+  xNew = chebyshev_grid(order,len,w)
+  phi_prev = interpolate_instanton(xNew,phi,transform)
+  call compute_profile(delta,order,phi,phi_prev)
   
-  call destroy_chebyshev(transform)
-  call create_grid(transform,order,w,len)
-  call initialise_equations(transform,delta,3)
-  
-  call solve(solv, phi)
-  call output_simple(transform,phi,.true.)
-  
-!  call scan_profiles()
-  call delete_solver(solv)
+  delta = 0.50001
+  r0 = 3._dl*(2._dl*delta)**0.5
+  meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
+  len = r0*3._dl**0.5; w = wbase / len / meff
+
+  xNew = chebyshev_grid(order,len,w)
+  phi_prev = interpolate_instanton(xNew,phi,transform)
+  call compute_profile(delta,order,phi,phi_prev)
+
+   delta = 0.500005
+  r0 = 3._dl*(2._dl*delta)**0.5
+  meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
+  len = r0*3._dl**0.5; w = wbase / len / meff
+
+  xNew = chebyshev_grid(order,len,w)
+  phi_prev = interpolate_instanton(xNew,phi,transform)
+  call compute_profile(delta,order,phi,phi_prev)
+
+  delta = 0.500003
+  r0 = 3._dl*(2._dl*delta)**0.5
+  meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
+  len = r0*3._dl**0.5; w = wbase / len / meff
+
+  xNew = chebyshev_grid(order,len,w)
+  phi_prev = interpolate_instanton(xNew,phi,transform)
+  call compute_profile(delta,order,phi,phi_prev)
+
+ 
+!  call scan_profiles(deltas)
+!  call delete_solver(solv)
   
 contains
 
-  subroutine scan_profiles()
-  open(unit=80,file='integrals.dat')
-  do i=1,size(deltas)
-     delta = deltas(i)
-     r0 = 3._dl*2._dl**0.5*delta**0.5; w0=2.**0.5;
-     meff = (2._dl*delta)**0.5*(1._dl-0.25_dl/delta**2)**0.5
-     len=r0*3._dl**0.5; w = wbase/len/meff
-     call destroy_chebyshev(transform)
-     call create_grid(transform,order,w,len)
-     call initialise_equations(transform,delta,3)
-!     if (meff*r0 < 2._dl) then
-     if (.false.) then
-        print*,"using prev, for delta = ", delta
-        phi = interpolate_instanton(transform%xGrid,phi_prev,transform,l_old,w_old) ! Need to store old transform
-     else
-        call initialise_fields(phi,delta,.false.)
-     endif
-     call solve(solv, phi)
-     !call print_solver(solv)
-     !call output_simple(transform,phi,.false.)
-     print*,delta, eval_action(phi,transform,3,r0)
-     write(80,*) delta, eval_action(phi,transform,3,r0)
-     w_old = w; l_old = len; phi_prev = phi
-  enddo
+  subroutine interpolate_new_field(order,phi_old,phi_new,tForm)
+    integer, intent(in) :: order
+    real(dl), dimension(0:order), intent(in) :: phi_old
+    real(dl), dimension(0:order), intent(out) :: phi_new
+    type(Chebyshev), intent(in) :: tForm
+    real(dl), dimension(0:order) :: xNew
+    xNew = chebyshev_grid(order,len,w)
+    
+  end subroutine interpolate_new_field
+  
+  ! GRRR, this thing is all fucked because of the order I need to compute things in.  Design a useful way to modularise it
+  
+  !>@brief
+  !> Initialise our initial guess for the instanton profile
+  !>
+  !>@param[in] prev  If True - initialise profile using previous numerical profile
+  !>                 If False - initialise using an analytic formula
+  subroutine initialise_fields(phi_i,delta,prev,w,len,phi_prev)
+    real(dl), dimension(:), intent(out) :: phi_i
+    real(dl), intent(in) :: delta
+    logical, intent(in) :: prev
+    real(dl), intent(in), optional :: w,len
+    real(dl), intent(in), optional :: phi_prev
+    real(dl) :: r0, meff
+    real(dl) :: phi_new(1:size(phi_i))
+    real(dl), allocatable :: xNew(:)
+
+    ! This is all fucked
+    if (prev) then
+!       allocate(xNew(0:order))
+!       xNew = chebyshev_grid()
+!       phi_new = interpolate_instanton(xNew,phi_prev,transform,len,w)
+!       phi_i = phi_new
+       ! deallocate(xNew)
+    else
+       r0 = 3._dl*(2.*delta)**0.5
+       meff = (2.*delta)**0.5*(1._dl-0.25_dl/delta**2)**0.5
+!       if (delta > 0.7) then
+!          phi = -2._dl*atan(exp((transform%xGrid-r0)*meff)) + pi ! For Drummond
+!       else
+!          phi = -0.5_dl*(phit-phif)*tanh((transform%xGrid-r0)/w0) + 0.5_dl*(phit+phif)
+!       endif
+       !       call thin_wall_profile()
+       if (meff*r0 < 100.) then
+          phi_i = -2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*transform%xGrid)) ! Brutal nonlocality
+       else
+          phi_i = -2._dl*atan(exp((transform%xGrid-r0)*meff)) + pi
+       endif
+    endif
+  end subroutine initialise_fields
+
+  
+  subroutine initial_profile(phi,delta,phi_prev)
+    type(Solution), intent(out) :: phi, phi_prev
+    real(dl), intent(in) :: delta
+    real(dl) :: r0, meff
+
+    r0 = 3._dl*(delta*2._dl)**0.5
+    meff = (delta*2._dl)**0.5*(1._dl-0.25/delta**2)**0.5
+!    if (meff*r0 < 1.) then
+    if (.false.) then
+    ! Add interpolation and condition above
+    else
+       call breather_profile(phi%tForm%xGrid,phi%phi,r0,1./meff)  ! ugly nonlocality with transform
+    endif
+       
+  end subroutine initial_profile
+  
+  subroutine scan_profiles(delVals)
+    real(dl), dimension(:), intent(in) :: delVals
+    
+    open(unit=80,file='integrals.dat')
+    do i=1,size(delVals)
+       delta = delVals(i)
+       r0 = 3._dl*2._dl**0.5*delta**0.5; w0=2.**0.5;
+       meff = (2._dl*delta)**0.5*(1._dl-0.25_dl/delta**2)**0.5
+       len=r0*3._dl**0.5; w = wbase/len/meff
+       call destroy_chebyshev(transform)
+       call create_grid(transform,order,w,len)
+       call initialise_equations(transform,delta,3)
+       !     if (meff*r0 < 2._dl) then
+       if (.false.) then
+          print*,"using prev, for delta = ", delta
+          phi = interpolate_instanton(transform%xGrid,phi_prev,transform) ! Need to store old transform
+       else
+          call initialise_fields(phi,delta,.false.)
+       endif
+       call solve(solv, phi)
+       !call print_solver(solv)
+       !call output_simple(transform,phi,.false.)
+       print*,delta, eval_action(phi,transform,3,r0)
+       write(80,*) delta, eval_action(phi,transform,3,r0)
+       w_old = w; l_old = len; phi_prev = phi
+    enddo
   end subroutine scan_profiles
   
   !>@todo
@@ -179,7 +291,7 @@ contains
     ! Replace these lines with the subroutine call above.  Or better, back it all into the initialisation?  No, I need r0 and w for the grid creation
     r0 = 3._dl*2._dl**0.5*delta**0.5
     ! r0 = r_bub( (/delta/) )
-    meff = (2.*delta)**0.5*(1._dl-0.25_dl/delta**2)**0.5
+    meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
     ! meff = w_bub( (/delta/) )
     len = r0*3._dl**0.5; w = wbase / len/ meff
     ! call grid_params(len,w,r0,meff)
@@ -199,55 +311,7 @@ contains
     call solve(solv,phi)
     print*,eval_action(phi,transform,3,r0)
     call output_simple(transform,phi,.false.)
-    
-!    call destroy_chebyshev(transform)
   end subroutine compute_profile
-
-  subroutine initial_profile(phi,delta,phi_prev)
-    type(Solution), intent(out) :: phi, phi_prev
-    real(dl), intent(in) :: delta
-    real(dl) :: r0, meff
-
-    r0 = 3._dl*(delta*2._dl)**0.5
-    meff = (delta*2._dl)**0.5*(1._dl-0.25/delta**2)**0.5
-!    if (meff*r0 < 1.) then
-    if (.false.) then
-    ! Add interpolation and condition above
-    else
-       call breather_profile(phi%tForm%xGrid,phi%phi,r0,1./meff)  ! ugly nonlocality with transform
-    endif
-       
-  end subroutine initial_profile
-  
-  !>@brief
-  !> Initialise our initial guess for the instanton profile
-  !>
-  !>@param[in] prev  If True - initialise profile using previous numerical profile
-  !>                 If False - initialise using an analytic formula
-  subroutine initialise_fields(phi_i,delta,prev)
-    real(dl), dimension(:), intent(out) :: phi_i
-    real(dl), intent(in) :: delta
-    logical, intent(in) :: prev
-    real(dl) :: r0, meff
-    
-    if (prev) then
-       phi(:) = phi_prev(:) ! ugly nonlocality
-    else
-       r0 = 3._dl*(2.*delta)**0.5
-       meff = (2.*delta)**0.5*(1._dl-0.25_dl/delta**2)**0.5
-!       if (delta > 0.7) then
-!          phi = -2._dl*atan(exp((transform%xGrid-r0)*meff)) + pi ! For Drummond
-!       else
-!          phi = -0.5_dl*(phit-phif)*tanh((transform%xGrid-r0)/w0) + 0.5_dl*(phit+phif)
-!       endif
-       !       call thin_wall_profile()
-       if (meff*r0 < 100.) then
-          phi = -2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*transform%xGrid)) ! Brutal nonlocality
-       else
-          phi = -2._dl*atan(exp((transform%xGrid-r0)*meff)) + pi
-       endif
-    endif
-  end subroutine initialise_fields
 
   !>@brief
   !> Compute the thin wall profile.  This will be more easily stored in the model subroutine
@@ -420,8 +484,10 @@ contains
     integer :: i, sz
     integer, parameter :: u = 60  ! Fix this ugliness
     real(dl), dimension(1:size(phi)) :: phi_spec, dphi, d2phi
-
-    if (init) open(unit=u,file='instanton.dat')
+    logical :: o
+    
+    inquire(opened=o,unit=u)
+    if (.not.o) open(unit=u,file='instanton.dat')
 
     sz = size(phi)
     phi_spec = matmul(tForm%fTrans,phi) 
@@ -516,14 +582,15 @@ contains
   end function eval_action
 
   ! This doesn't seem to be working yet
-  function interpolate_instanton(r_new,f_cur,tForm,L,w) result(f_int)
+  function interpolate_instanton(r_new,f_cur,tForm) result(f_int)
     real(dl), dimension(:), intent(in) :: r_new, f_cur
     type(Chebyshev), intent(in) :: tForm
-    real(dl), intent(in) :: L,w
+    real(dl) :: L,w
     real(dl), dimension(1:size(r_new)) :: f_int
     real(dl) :: xvals(1:size(r_new)), spec(1:size(f_cur)),  bVals(1:size(f_cur),0:2)
     integer :: i; real(dl) :: winv
 
+    w = tForm%scl; L = tForm%len
     winv = 1._dl/w
     xvals = r_new / sqrt(r_new**2+L**2)
     xvals = atan(winv*tan(pi*(xvals-0.5_dl)))/pi + 0.5_dl
@@ -539,5 +606,23 @@ contains
        f_int(i) = sum(spec*bVals(:,0))
     enddo
   end function interpolate_instanton
-    
+
+  !>@brief
+  !> Return the collocation grid for even Chebyshevs on the doubly-infinite interval with clustering
+  function chebyshev_grid(order,L,w) result(xVals)
+    integer, intent(in) :: order
+    real(dl), intent(in) :: L,w
+    real(dl), dimension(0:order) :: xVals
+    integer :: i; real(dl) :: dkcol
+
+    ! Replace with a function call
+    dkcol = 0.5_dl*pi / dble(order+1)
+    do i=0,order
+       xVals(i) = -cos( dble(2*i+1)*dkcol )
+    enddo
+    xVals = sqrt(0.5_dl*xVals + 0.5_dl)
+    xVals = (1._dl/pi)*atan(w*tan(pi*(xVals-0.5_dl))) + 0.5_dl
+    xVals = L*xVals / sqrt(1._dl - xVals**2)
+  end function chebyshev_grid
+  
 end program instanton
