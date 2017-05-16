@@ -33,12 +33,11 @@ program Instanton
   real(dl) :: delta
 !  real(dl), dimension(1:18) :: deltas = [ 500., 200., 100., 50., 20., 10., 5., 2., 1., 0.8, 0.6, 0.55, 0.52, 0.51, 0.505, 0.501, 0.5001, 0.50001 ]
 !  real(dl), dimension(1:2) :: deltas = [ 0.6, 0.8 ]
-  real(dl), dimension(1:20) :: deltas
+  real(dl), dimension(1:25) :: deltas
   
-  real(dl), dimension(101) :: rnew, phinew
-
-  deltas = [ (0.3*(i-1), i=1,20) ]
-  deltas = 0.51_dl + 0.1*exp(deltas)
+  deltas = [ (-4.+0.25*(i-1), i=25,1,-1) ]
+  deltas = 0.5_dl + 10.**deltas
+  print*,deltas
   
   ! Values for double well
 !  delta = 0.5_dl
@@ -76,7 +75,9 @@ program Instanton
   delta = 0.52
   r0 = 3._dl*(2._dl*delta)**0.5
   meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
-  len = r0*3._dl**0.5; w = wbase / len / meff
+  call grid_params(w,len,r0,1._dl/meff)
+
+!  len = r0*3._dl**0.5; w = wbase / len / meff
 
   allocate(xNew(0:order))
   xNew = chebyshev_grid(order,len,w)
@@ -274,8 +275,7 @@ contains
     integer, intent(in) :: order
     real(dl), dimension(0:order) :: phi
     real(dl), intent(in), optional :: phi_init(0:order)
-!    type(Instanton) :: sol
-    !type(Chebyshev) :: transform
+    
     type(Solver) :: solv
     real(dl) :: w,len         ! Collocation grid parameters
     real(dl) :: r0, w0, meff  ! Bubble Parameters
@@ -284,17 +284,13 @@ contains
     
     n = order+1
 
-!    call get_minima(phif,phit)
+!   call get_minima(phif,phit)
     phif = 0._dl; phit = pi  ! Replace this with the function call above
 
-!    call get_bubble_params(r0)
-    ! Replace these lines with the subroutine call above.  Or better, back it all into the initialisation?  No, I need r0 and w for the grid creation
-    r0 = 3._dl*2._dl**0.5*delta**0.5
-    ! r0 = r_bub( (/delta/) )
-    meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
-    ! meff = w_bub( (/delta/) )
-    len = r0*3._dl**0.5; w = wbase / len/ meff
-    ! call grid_params(len,w,r0,meff)
+!    r0 = 3._dl*2._dl**0.5*delta**0.5
+!    meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
+    call bubble_parameters(delta,r0,meff)
+    call grid_params(w,len,r0,1._dl/meff)
 
     ! The way transform is used here is ugly and nonlocal.  Fix it!!!
     call destroy_chebyshev(transform)
@@ -345,15 +341,24 @@ contains
     width = 0._dl  ! Make this actually work
   end subroutine thin_wall_params
 
-  subroutine bubble_parameters(delta,r0,w0,meff)
+  subroutine bubble_parameters(delta,r0,meff)
     real(dl), intent(in) :: delta
-    real(dl), intent(out) :: r0, w0, meff
+    real(dl), intent(out) :: r0, meff
 
-    meff = (2._dl*delta)**0.5*(1._dl-0.25/delta**2)**0.5
+    meff = (2._dl*delta)**0.5!*(1._dl-0.25/delta**2)**0.5
     r0 = 3._dl*(2._dl*delta)**0.5
-    w0 = 1._dl/(2._dl*delta)**0.5  ! Adjust as necessary
+!    w0 = 1._dl/(2._dl*delta)**0.5  ! Adjust as necessary
   end subroutine bubble_parameters
   
+  subroutine grid_params(w,len,r0,w0)
+    real(dl), intent(out) :: w, len
+    real(dl), intent(in) :: r0,w0
+    real(dl), parameter :: wscl = 10._dl
+    len = r0*3._dl**0.5
+    w = wscl * w0 / len 
+  end subroutine grid_params
+
+    
   subroutine bubble_params(delta,r0,w0,len,w)
     real(dl), intent(in) :: delta
     real(dl), intent(out) :: r0, w0, len, w
@@ -365,14 +370,6 @@ contains
     len = r0*3._dl**0.5
     w = w0/len  ! Adjust this
   end subroutine bubble_params
-
-  subroutine grid_params(w,len,r0,w0)
-    real(dl), intent(out) :: w, len
-    real(dl), intent(in) :: r0,w0
-    real(dl), parameter :: wscl = 10._dl
-    len = r0*3._dl**0.5
-    w = wscl * w0 / len 
-  end subroutine grid_params
   
   subroutine create_grid(tForm,ord,w,l)
     type(Chebyshev), intent(out) :: tForm
