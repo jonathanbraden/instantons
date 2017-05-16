@@ -33,25 +33,23 @@ program Instanton
   real(dl) :: delta
 !  real(dl), dimension(1:18) :: deltas = [ 500., 200., 100., 50., 20., 10., 5., 2., 1., 0.8, 0.6, 0.55, 0.52, 0.51, 0.505, 0.501, 0.5001, 0.50001 ]
 !  real(dl), dimension(1:2) :: deltas = [ 0.6, 0.8 ]
-  real(dl), dimension(1:25) :: deltas
+  real(dl), dimension(1:29) :: deltas
   
-  deltas = [ (-4.+0.25*(i-1), i=25,1,-1) ]
+  deltas = [ (-5.+0.2*(i-1), i=size(deltas),1,-1) ]
   deltas = 0.5_dl + 10.**deltas
-  print*,deltas
   
   ! Values for double well
 !  delta = 0.5_dl
 !  r0 = 1.5_dl*2._dl**0.5/delta; w0=2.**0.5
 !  phif=-1.; phit=1.
 
-!  delta = 0.54_dl
-  delta = 0.56_dl
+!  delta = 0.54_dl 0.56_dl
+  delta = deltas(1) 
   
   phif = 0._dl; phit = pi
-  order = 100; n=order+1
-  r0 = 3._dl*(2._dl*delta)**0.5
-  meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
-  len = r0*3._dl**0.5; w = wbase / len / meff
+  order = 200; n=order+1
+  call bubble_parameters(delta,r0,meff);  call grid_params(w,len,r0,1._dl/meff)
+
   
   ! Initialise our derivatives and set up collocation grid
   call create_grid(transform,order,w,len)
@@ -72,94 +70,21 @@ program Instanton
 
   call compute_profile(delta,order,phi)
 
-  delta = 0.52
-  r0 = 3._dl*(2._dl*delta)**0.5
-  meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
-  call grid_params(w,len,r0,1._dl/meff)
-
-!  len = r0*3._dl**0.5; w = wbase / len / meff
-
-  allocate(xNew(0:order))
-  xNew = chebyshev_grid(order,len,w)
-  phi_prev = interpolate_instanton(xNew,phi,transform)
-  call compute_profile(delta,order,phi,phi_prev)
-
-  delta = 0.51
-  r0 = 3._dl*(2._dl*delta)**0.5
-  meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
-  len = r0*3._dl**0.5; w = wbase / len / meff
-
-  xNew = chebyshev_grid(order,len,w)
-  phi_prev = interpolate_instanton(xNew,phi,transform)
-  call compute_profile(delta,order,phi,phi_prev)
-
-  delta = 0.505
-  r0 = 3._dl*(2._dl*delta)**0.5
-  meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
-  len = r0*3._dl**0.5; w = wbase / len / meff
-
-  xNew = chebyshev_grid(order,len,w)
-  phi_prev = interpolate_instanton(xNew,phi,transform)
-  call compute_profile(delta,order,phi,phi_prev)
-
-  delta = 0.501
-  r0 = 3._dl*(2._dl*delta)**0.5
-  meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
-  len = r0*3._dl**0.5; w = wbase / len / meff
-
-  xNew = chebyshev_grid(order,len,w)
-  phi_prev = interpolate_instanton(xNew,phi,transform)
-  call compute_profile(delta,order,phi,phi_prev)
-
-  delta = 0.5001
-  r0 = 3._dl*(2._dl*delta)**0.5
-  meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
-  len = r0*3._dl**0.5; w = wbase / len / meff
-
-  xNew = chebyshev_grid(order,len,w)
-  phi_prev = interpolate_instanton(xNew,phi,transform)
-  call compute_profile(delta,order,phi,phi_prev)
-
- 
-  delta = 0.50005
-  r0 = 3._dl*(2._dl*delta)**0.5
-  meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
-  len = r0*3._dl**0.5; w = wbase / len / meff
-
-  xNew = chebyshev_grid(order,len,w)
-  phi_prev = interpolate_instanton(xNew,phi,transform)
-  call compute_profile(delta,order,phi,phi_prev)
+  allocate(xNew(0:order)) ! Remove this if necessary
+  do i=1,size(deltas)
+     delta = deltas(i); print*,"delta = ",delta
+     call bubble_parameters(delta,r0,meff);  call grid_params(w,len,r0,1._dl/meff)
+     if (phi(0) < 0.9*phit) then
+        print*,"Using old solution"
+        xNew = chebyshev_grid(order,len,w)
+        phi_prev = interpolate_instanton(xNew,phi,transform)
+        call compute_profile(delta,order,phi,phi_prev)
+     else
+        call compute_profile(delta,order,phi)
+     endif
+  enddo
   
-  delta = 0.50001
-  r0 = 3._dl*(2._dl*delta)**0.5
-  meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
-  len = r0*3._dl**0.5; w = wbase / len / meff
-
-  xNew = chebyshev_grid(order,len,w)
-  phi_prev = interpolate_instanton(xNew,phi,transform)
-  call compute_profile(delta,order,phi,phi_prev)
-
-   delta = 0.500005
-  r0 = 3._dl*(2._dl*delta)**0.5
-  meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
-  len = r0*3._dl**0.5; w = wbase / len / meff
-
-  xNew = chebyshev_grid(order,len,w)
-  phi_prev = interpolate_instanton(xNew,phi,transform)
-  call compute_profile(delta,order,phi,phi_prev)
-
-  delta = 0.500003
-  r0 = 3._dl*(2._dl*delta)**0.5
-  meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
-  len = r0*3._dl**0.5; w = wbase / len / meff
-
-  xNew = chebyshev_grid(order,len,w)
-  phi_prev = interpolate_instanton(xNew,phi,transform)
-  call compute_profile(delta,order,phi,phi_prev)
-
- 
 !  call scan_profiles(deltas)
-!  call delete_solver(solv)
   
 contains
 
@@ -287,8 +212,6 @@ contains
 !   call get_minima(phif,phit)
     phif = 0._dl; phit = pi  ! Replace this with the function call above
 
-!    r0 = 3._dl*2._dl**0.5*delta**0.5
-!    meff = (2.*delta)**0.5!*(1._dl-0.25_dl/delta**2)**0.5
     call bubble_parameters(delta,r0,meff)
     call grid_params(w,len,r0,1._dl/meff)
 
