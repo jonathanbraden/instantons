@@ -33,7 +33,7 @@ program Instanton
   real(dl) :: delta
 !  real(dl), dimension(1:18) :: deltas = [ 500., 200., 100., 50., 20., 10., 5., 2., 1., 0.8, 0.6, 0.55, 0.52, 0.51, 0.505, 0.501, 0.5001, 0.50001 ]
 !  real(dl), dimension(1:2) :: deltas = [ 0.6, 0.8 ]
-  real(dl), dimension(1:29) :: deltas
+  real(dl), dimension(1:40) :: deltas
   
   deltas = [ (-5.+0.2*(i-1), i=size(deltas),1,-1) ]
   deltas = 0.5_dl + 10.**deltas
@@ -47,30 +47,15 @@ program Instanton
   delta = deltas(1) 
   
   phif = 0._dl; phit = pi
-  order = 200; n=order+1
+  order = 10; n=order+1
   call bubble_parameters(delta,r0,meff);  call grid_params(w,len,r0,1._dl/meff)
-
-  
-  ! Initialise our derivatives and set up collocation grid
   call create_grid(transform,order,w,len)
-!  call create_solver(solv,n,100,0.1_dl)
-!  call initialise_equations(transform,delta,3)
-!  call create_model(model)
-
-  allocate(phi(0:order),phi_prev(0:order))  ! This is ugly, fix it to allow for varying orders
-!  call initialise_fields(phi,delta,.false.)
-  ! Move this vacuum solving somewhere else
-!  call get_vacuum(phif); call get_vacuum(phit)
-!  print*,"vacua are ", phit, phif
   
-!  call solve(solv, phi)
-!  call output_simple(transform,phi,.true.)
-!  call get_action(phi,transform)
-!  print*,eval_action(phi,transform,3,r0)
-
+  allocate(phi(0:order),phi_prev(0:order))  ! This is ugly, fix it to allow for varying orders
   call compute_profile(delta,order,phi)
 
   allocate(xNew(0:order)) ! Remove this if necessary
+  open(unit=80,file='actions.dat')
   do i=1,size(deltas)
      delta = deltas(i); print*,"delta = ",delta
      call bubble_parameters(delta,r0,meff);  call grid_params(w,len,r0,1._dl/meff)
@@ -82,7 +67,9 @@ program Instanton
      else
         call compute_profile(delta,order,phi)
      endif
+     write(80,*) delta, eval_action(phi,transform,3,r0) 
   enddo
+  close(80)
   
 !  call scan_profiles(deltas)
   
