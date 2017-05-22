@@ -33,8 +33,8 @@ program Instanton
   real(dl) :: delta
 !  real(dl), dimension(1:18) :: deltas = [ 500., 200., 100., 50., 20., 10., 5., 2., 1., 0.8, 0.6, 0.55, 0.52, 0.51, 0.505, 0.501, 0.5001, 0.50001 ]
 !  real(dl), dimension(1:2) :: deltas = [ 0.6, 0.8 ]
-  real(dl), dimension(1:50) :: deltas
-  real(dl), allocatable :: deltas; integer :: nDel
+!  real(dl), dimension(1:50) :: deltas
+  real(dl), allocatable :: deltas(:); integer :: nDel
 
   nDel = 50; allocate(deltas(1:nDel))
   deltas = 0.5_dl + [ (-6.+0.2*(i-1), i=size(deltas),1,-1) ]
