@@ -33,10 +33,11 @@ program Instanton
   real(dl) :: delta
 !  real(dl), dimension(1:18) :: deltas = [ 500., 200., 100., 50., 20., 10., 5., 2., 1., 0.8, 0.6, 0.55, 0.52, 0.51, 0.505, 0.501, 0.5001, 0.50001 ]
 !  real(dl), dimension(1:2) :: deltas = [ 0.6, 0.8 ]
-  real(dl), dimension(1:40) :: deltas
-  
-  deltas = [ (-5.+0.2*(i-1), i=size(deltas),1,-1) ]
-  deltas = 0.5_dl + 10.**deltas
+  real(dl), dimension(1:50) :: deltas
+  real(dl), allocatable :: deltas; integer :: nDel
+
+  nDel = 50; allocate(deltas(1:nDel))
+  deltas = 0.5_dl + [ (-6.+0.2*(i-1), i=size(deltas),1,-1) ]
   
   ! Values for double well
 !  delta = 0.5_dl
@@ -47,16 +48,16 @@ program Instanton
   delta = deltas(1) 
   
   phif = 0._dl; phit = pi
-  order = 10; n=order+1
+  order = 200; n=order+1
+  allocate(phi(0:order),phi_prev(0:order))  ! This is ugly, fix it to allow for varying orders
+
   call bubble_parameters(delta,r0,meff);  call grid_params(w,len,r0,1._dl/meff)
   call create_grid(transform,order,w,len)
-  
-  allocate(phi(0:order),phi_prev(0:order))  ! This is ugly, fix it to allow for varying orders
   call compute_profile(delta,order,phi)
 
   allocate(xNew(0:order)) ! Remove this if necessary
   open(unit=80,file='actions.dat')
-  do i=1,size(deltas)
+  do i=2,size(deltas)
      delta = deltas(i); print*,"delta = ",delta
      call bubble_parameters(delta,r0,meff);  call grid_params(w,len,r0,1._dl/meff)
      if (phi(0) < 0.9*phit) then
@@ -212,6 +213,7 @@ contains
     if (present(phi_init)) then
        phi(0:order) = phi_init(0:order)
     else
+       !!! Need to fix this now, since I have a different meff in the subroutine
        call initialise_fields(phi,delta,.false.)  ! Replace this with a call to thin-wall profile or something
     endif
     call solve(solv,phi)
@@ -251,6 +253,14 @@ contains
     width = 0._dl  ! Make this actually work
   end subroutine thin_wall_params
 
+  subroutine bubble_parameters_nd(delta,dim,r0,meff)
+    real(dl), intent(in) :: delta, dim
+    real(dl), intent(out) :: r0, meff
+
+    meff = (2._dl*delta)**0.5
+    r0 = dim*(2._dl*delta)**0.5
+  end subroutine bubble_parameters_nd
+  
   subroutine bubble_parameters(delta,r0,meff)
     real(dl), intent(in) :: delta
     real(dl), intent(out) :: r0, meff
@@ -515,6 +525,15 @@ contains
   end function interpolate_instanton
 
   !>@brief
+  !> Get the value of the instanton at the origin through interpolation, and use this to extract various quantities that appear in the thin-wall approximation.
+  !> These include
+  !>@arg The energy difference between the center and exterior
+  !>@arg The field value at the center
+  subroutine origin_properties()
+
+  end subroutine origin_properties
+  
+  !>@brief
   !> Return the collocation grid for even Chebyshevs on the doubly-infinite interval with clustering
   function chebyshev_grid(order,L,w) result(xVals)
     integer, intent(in) :: order
@@ -531,5 +550,22 @@ contains
     xVals = (1._dl/pi)*atan(w*tan(pi*(xVals-0.5_dl))) + 0.5_dl
     xVals = L*xVals / sqrt(1._dl - xVals**2)
   end function chebyshev_grid
+
+  !>@brief
+  !> Return Gauss-Lobatto Grid for the even Chebyshevs
+  function chebyshev_grid_lobattor(order,L,w) result(xVals)
+    integer, intent(in) :: order
+    real(dl), intent(in) :: L,w
+    real(dl), dimension(0:order) :: xVals
+    integer :: i; real(dl) :: dkcol
+
+    dkcol = pi / dble(order)
+    do i=0,order
+       xVals(i) = -dcos(dble(i)*dkcol)
+    enddo
+    xVals = sqrt(0.5_dl*xVals + 0.5_dl)
+    xVals = (1._dl/pi)*atan(w*tan(pi*(xVals-0.5_dl))) + 0.5_dl
+    xVals = L*xVals / sqrt(1._dl - xVals**2)
+  end function chebyshev_grid_lobattor
   
 end program instanton
