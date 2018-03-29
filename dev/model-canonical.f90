@@ -27,7 +27,7 @@ module Model
   real(dl) :: del
   integer :: ndim
 
-  type(Chebyshev) :: transform  ! Get rid of this ugliness somehow ..., or make it private.  This fucks everything up.  Do I even need this anywhere?
+!  type(Chebyshev) :: transform  ! Get rid of this ugliness somehow ..., or make it private.  This fucks everything up.  Do I even need this anywhere?
 
 contains
   subroutine initialise_equations(tForm, delta, dim)

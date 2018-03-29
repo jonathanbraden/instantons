@@ -135,14 +135,14 @@ contains
 !    call eqn(this%L,this%S,phi_cur)
 !  end subroutine line_iteration
 
-  subroutine solve_radius(this,f_cur)
+  subroutine solve_radius(this,f_cur,tForm)
     type(Solver), intent(inout) :: this
     real(dl), dimension(:), intent(inout) :: f_cur
+    type(Chebyshev), intent(in) :: tForm
     real(dl), dimension(:), allocatable :: f_prime
 
     allocate(f_prime(1:size(f_cur)))
-    f_prime = matmul(transform%derivs(:,:,1),f_cur)
-    
+    f_prime = matmul(tForm%derivs(:,:,1),f_cur)    
   end subroutine solve_radius
 
   !>@brief
@@ -275,13 +275,15 @@ contains
   !>@brief
   !> Output information from the nonlinear solver.  This can be useful for debugging, or to assess
   !> convergence of our iterator
-  subroutine output_solver(this)
+  subroutine output_solver(this,tForm)
     type(Solver), intent(in) :: this
+    type(Chebyshev), intent(in) :: tForm
     integer :: i
     real(dl), dimension(:), allocatable :: f_deriv
 
     allocate(f_deriv(1:size(this%f_prev)))
-    f_deriv = matmul(transform%derivs(:,:,1),this%f_prev)
+    !    f_deriv = matmul(transform%derivs(:,:,1),this%f_prev)
+    f_deriv = matmul(tForm%derivs(:,:,1),this%f_prev)
     do i=1,this%nVar
       write(this%u,*) this%f_prev(i), this%del(i), this%S(i), this%S_prev(i), f_deriv(i)
     enddo

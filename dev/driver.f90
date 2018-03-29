@@ -5,9 +5,6 @@ program Instanton
   use Nonlinear_Solver
   implicit none
 
-! Nonlinear Solver Parameters and storage.  To be moved to a separate module upon code cleanup
-!  type(Field_Model) :: model
- 
   type Solution
      type(Chebyshev) :: tForm
      real(dl), dimension(:), allocatable :: phi
@@ -16,17 +13,15 @@ program Instanton
   real(dl), dimension(:), allocatable :: phi
   real(dl), dimension(:), allocatable :: model_params
 
-  integer :: order_, n
+  integer :: order_
   integer :: i
-
-  ! Move these parameters somewhere else
-!  type(Bubble_Params) :: bubble
 
   real(dl) :: phit, phif  ! kill these to restore locality, currently used in output subroutine
   
   real(dl) :: delta
   real(dl), allocatable :: deltas(:); integer :: nDel
-  integer :: dim 
+  integer :: dim
+  type(Chebyshev) :: tForm
   
   dim = 1
   nDel = 50; allocate(deltas(1:nDel))
@@ -39,7 +34,7 @@ program Instanton
 
   order_=100
   allocate(phi(0:order_))
-  call compute_profile(0.5*1.3_dl**2,order_,dim,phi,out=.true.)
+  call compute_profile(0.5*1.3_dl**2,order_,dim,phi,tForm,out=.true.)
   
   call scan_profiles(deltas,dim,200)
   
@@ -52,10 +47,11 @@ contains
   !>
   !>@param[in] prev  If True - initialise profile using previous numerical profile
   !>                 If False - initialise using an analytic formula
-  subroutine initialise_fields(phi_i,delta,prev,w,len,phi_prev)
+  subroutine initialise_fields(phi_i,delta,prev,tForm,w,len,phi_prev)
     real(dl), dimension(:), intent(out) :: phi_i
     real(dl), intent(in) :: delta
     logical, intent(in) :: prev
+    type(Chebyshev), intent(in) :: tForm
     real(dl), intent(in), optional :: w,len
     real(dl), intent(in), optional :: phi_prev
     real(dl) :: r0, meff
@@ -80,9 +76,9 @@ contains
 !       endif
        !       call thin_wall_profile()
        if (meff*r0 < 100.) then
-          phi_i = -2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*transform%xGrid)) ! Brutal nonlocality
+          phi_i = -2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*tForm%xGrid)) ! Brutal nonlocality
        else
-          phi_i = -2._dl*atan(exp((transform%xGrid-r0)*meff)) + pi
+          phi_i = -2._dl*atan(exp((tForm%xGrid-r0)*meff)) + pi
        endif
     endif
   end subroutine initialise_fields
@@ -108,6 +104,7 @@ contains
     real(dl), dimension(:), intent(in) :: delVals
     integer, intent(in) :: dim, ord
 
+    type(Chebyshev) :: tForm
     real(dl) :: delta
     real(dl) :: w, len, r0, meff
     real(dl) :: phit, phif
@@ -119,34 +116,34 @@ contains
     open(unit=actFile,file='actions.dat')
 
     delta = delVals(1)
-    call compute_profile(delta,ord,dim,phi,out=.true.)
-    write(actFile,*) delta, eval_action(phi,transform,dim,r0)
+    call compute_profile(delta,ord,dim,phi,tForm)
+    write(actFile,*) delta, eval_action(phi,tForm,dim,r0)
     
     do i=2,size(delVals)
        delta = delVals(i)
        if (phi(0) < 0.9*phit) then
           call bubble_parameters_nd(delta,dim*1._dl,r0,meff); call grid_params(w,len,r0,1._dl/meff)
           xNew = chebyshev_grid(ord,len,w)
-          phi_prev = interpolate_instanton(xNew,phi,transform)  ! horrible nonlocality with transform
-          call compute_profile(delta,ord,dim,phi,phi_prev)
+          phi_prev = interpolate_instanton(xNew,phi,tForm)
+          call compute_profile(delta,ord,dim,phi,tForm,phi_prev)
        else
-          call compute_profile(delta,ord,dim,phi)
+          call compute_profile(delta,ord,dim,phi,tForm)
        endif
-       write(actFile,*) delta, eval_action(phi,transform,dim,r0)
+       write(actFile,*) delta, eval_action(phi,tForm,dim,r0)
     enddo
     close(actFile)
   end subroutine scan_profiles
   
   !>@brief
   !> Solve for a single bubble profile.  Optionally, store the output field values, derivatives, potential, etc. in a file.
-  subroutine compute_profile(delta, order, dim, phi, phi_init, out)
+  subroutine compute_profile(delta, order, dim, phi, tForm, phi_init, out)
     real(dl), intent(in) :: delta
     integer, intent(in) :: order, dim
     real(dl), dimension(0:order), intent(out) :: phi
+    type(Chebyshev), intent(out) :: tForm
     real(dl), intent(in), optional :: phi_init(0:order)
     logical, intent(in), optional :: out
 
-!    type(Chebyshev) :: tForm
     logical :: outLoc
     type(Solver) :: solv
     real(dl) :: w,len         ! Collocation grid parameters
@@ -164,21 +161,21 @@ contains
     call grid_params(w,len,r0,1._dl/meff)
 
     ! The way transform is used here is ugly and nonlocal.  Fix it!!!
-    call destroy_chebyshev(transform)
-    call create_grid(transform,order,w,len)
+!    call destroy_chebyshev(transform)
+    call create_grid(tForm,order,w,len)
     call create_solver(solv,n,100,0.1_dl)
-    call initialise_equations(transform,delta,dim)
+    call initialise_equations(tForm,delta,dim)
     
     ! Modularise this part
     if (present(phi_init)) then
        phi(0:order) = phi_init(0:order)
     else
 !!! Need to fix this now, since I have a different meff in the subroutine
-       call initialise_fields(phi,delta,.false.)  ! Replace this with a call to thin-wall profile or something
+       call initialise_fields(phi,delta,.false.,tForm)  ! Replace this with a call to thin-wall profile or something
     endif
     call solve(solv,phi)
 
-    if (outLoc) call output_simple(transform,phi,.false.)
+    if (outLoc) call output_simple(tForm,phi,.false.)
   end subroutine compute_profile
 
   !>@brief
@@ -405,13 +402,13 @@ contains
 
     dfld = matmul(tForm%derivs(:,:,1),fld)
     lag = 0.5_dl*dfld**2 + potential(fld) - potential(phif)
-    action(1) = quadrature(transform,lag*tForm%xGrid(:)**d)
-    action(2) = quadrature(transform,dfld**2)
-    action(3) = quadrature(transform,0.5_dl*dfld**2*tForm%xGrid(:)**d)
-    action(4) = quadrature(transform,(potential(fld)-potential(phif))*tForm%xGrid(:)**d)
+    action(1) = quadrature(tForm,lag*tForm%xGrid(:)**d)
+    action(2) = quadrature(tForm,dfld**2)
+    action(3) = quadrature(tForm,0.5_dl*dfld**2*tForm%xGrid(:)**d)
+    action(4) = quadrature(tForm,(potential(fld)-potential(phif))*tForm%xGrid(:)**d)
     action(5) = 0.5_dl*action(2)*r0**d
-    action(6) = quadrature(transform,(0.5_dl*dfld**2+potential_tw(fld))*tForm%xGrid(:)**d)
-    action(7) = quadrature(transform,fld*vprime(fld)*tForm%xGrid(:)**d)
+    action(6) = quadrature(tForm,(0.5_dl*dfld**2+potential_tw(fld))*tForm%xGrid(:)**d)
+    action(7) = quadrature(tForm,fld*vprime(fld)*tForm%xGrid(:)**d)
     ! Add in the "thin-wall potential" here
   end function eval_action
 
@@ -449,6 +446,26 @@ contains
   subroutine origin_properties()
 
   end subroutine origin_properties
+
+  ! TO DO : Finish writing this
+  subroutine sim_bubble_profile(phi,tForm,dx,n,rc)
+    real(dl), dimension(:), intent(in) :: phi
+    type(Chebyshev), intent(in) :: tForm
+    real(dl), intent(in) :: dx, rc
+    integer, intent(in) :: n
+
+    real(dl), dimension(1:n) :: xNew, rad, phi_new
+    integer :: i, sz
+
+    xNew = (/ ( (i-1)*dx, i=1,n) /)
+    rad = (/ ( abs((i-1)*dx), i=1,n ) /)
+    sz = size(phi)
+    open(unit=50,file='init_bubble.dat')
+    do i=1,sz
+       write(50,*) phi_new(i)
+    enddo
+    close(unit=50)
+  end subroutine sim_bubble_profile
   
   !>@brief
   !> Return the collocation grid for even Chebyshevs on the doubly-infinite interval with clustering
