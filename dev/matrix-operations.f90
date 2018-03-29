@@ -1,3 +1,5 @@
+!#define OUTPUT T
+
 module Matrix
   use constants
   implicit none
@@ -30,9 +32,11 @@ contains
     Ainv = A
     call DGETRF( n, n, Ainv, lda, ipiv, info )
 
-! Add some calls to make sure the LU decomp worked
+! Print an error if the LU decomposition failed
     if (info.eq.0) then
+#ifdef OUTPUT
        print*, "LU decomposition successful"
+#endif
     elseif (info < 0) then
        print*, "LU decomposition: illegal value at ", info
        stop
@@ -51,7 +55,9 @@ contains
     if (info.ne.0) then
        stop "Matrix inversion failed!"
     else
+#ifdef OUTPUT
        print*, "Inverse Successful"
+#endif
     endif
 
     ! clean up temporary workspace
