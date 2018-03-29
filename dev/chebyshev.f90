@@ -94,6 +94,7 @@ module Cheby
      real(dl), allocatable :: derivs(:,:,:)
      real(dl), allocatable :: wFunc(:)
      real(dl) :: len, scl
+     logical :: init=.false.
   end type Chebyshev
 
 !  abstract interface 
@@ -155,7 +156,8 @@ contains
     integer :: i
 
     this%len = -1._dl; this%scl = 1._dl
-    
+
+    if (this%init) call destroy_chebyshev(this)
     call allocate_chebyshev(this, ord, nd)
 
     ! Get the collocation points
@@ -194,6 +196,7 @@ contains
     enddo
 
     this%wFunc = sqrt(1._dl-this%xGrid(:)**2)  ! Move this somewhere else
+    this%init = .true.
   end subroutine create_chebyshev
 
   !>@brief
@@ -231,6 +234,7 @@ contains
     new_t%xGrid = old%xGrid; new_t%weights = old%weights; new_t%norm = old%norm
     new_t%fTrans = old%fTrans; new_t%invTrans = old%invTrans
     new_t%derivs = old%derivs
+    new_t%init = .true.
   end subroutine copy_chebyshev
   
   !>@brief
@@ -335,10 +339,13 @@ contains
   subroutine destroy_chebyshev(this)
     type(Chebyshev), intent(inout) :: this
 
-    this%nx = -1; this%ord = -1; this%nDeriv = -1
-    deallocate(this%xGrid,this%weights,this%norm)
-    deallocate(this%fTrans,this%invTrans)
-    deallocate(this%derivs)
+    if (this%init) then
+       this%nx = -1; this%ord = -1; this%nDeriv = -1
+       deallocate(this%xGrid,this%weights,this%norm)
+       deallocate(this%fTrans,this%invTrans)
+       deallocate(this%derivs)
+    endif
+    this%init=.false.
   end subroutine destroy_chebyshev
 
   !>@brief
