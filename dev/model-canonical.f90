@@ -21,10 +21,11 @@ module Model
   use constants
   use Cheby
   implicit none
-  private :: L0, del
+  private :: L0, del, ndim
   
   real(dl), dimension(:,:), allocatable :: L0
   real(dl) :: del
+  integer :: ndim
 
   type(Chebyshev) :: transform  ! Get rid of this ugliness somehow ..., or make it private.  This fucks everything up.  Do I even need this anywhere?
 
@@ -35,7 +36,7 @@ contains
     integer, intent(in) :: dim
     integer :: i, sz
     
-    sz = size(tForm%xGrid)
+    sz = size(tForm%xGrid); ndim = dim
     if (allocated(L0)) deallocate(L0); allocate( L0(1:sz,1:sz) )
     do i=0,sz-1
        L0(i+1,:) = tForm%derivs(i,:,2) + dble(dim)*tForm%derivs(i,:,1)/tForm%xGrid(i)

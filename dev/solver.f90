@@ -93,20 +93,24 @@ contains
     deallocate(this%ipiv)
   end subroutine delete_solver
 
-  subroutine solve(this,f_cur)
+  subroutine solve(this,f_cur,test)
     type(Solver), intent(inout) :: this
     real(dl), dimension(:), intent(inout) :: f_cur
-    integer :: i; logical :: test
-    
+    logical, intent(out), optional :: test
+    integer :: i; logical :: convg
+
+    convg = .false.
     do i=1,this%maxIter
        call line_iteration(this,f_cur)
-       call output_solver(this)
+!       call output_solver(this)
 !       call print_solver(this)
-       if (stop_solver(this)) then; print*,"Converged in ",i," steps"; exit; endif
+       if (stop_solver(this)) then; print*,"Converged in ",i," steps"; convg=.true.; exit; endif
     enddo
+    if (.not.convg) print*,"Failed to converge "
     call print_solver(this)   
-    print*,""
     write(this%u,*) ""
+
+    if (present(test)) test = convg
   end subroutine solve
   
   !>@brief
@@ -275,11 +279,11 @@ contains
     type(Solver), intent(in) :: this
     integer :: i
     real(dl), dimension(:), allocatable :: f_deriv
-    
+
     allocate(f_deriv(1:size(this%f_prev)))
     f_deriv = matmul(transform%derivs(:,:,1),this%f_prev)
     do i=1,this%nVar
-       write(this%u,*) this%f_prev(i), this%del(i), this%S(i), this%S_prev(i), f_deriv(i)
+      write(this%u,*) this%f_prev(i), this%del(i), this%S(i), this%S_prev(i), f_deriv(i)
     enddo
     write(this%u,*)
   end subroutine output_solver
