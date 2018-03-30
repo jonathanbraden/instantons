@@ -24,8 +24,8 @@ program Instanton
   type(Chebyshev) :: tForm
   
   dim = 1
-  nDel = 50; allocate(deltas(1:nDel))
-  deltas = 0.5_dl + 10.**([ (-6.+0.2*(i-1), i=size(deltas),1,-1) ])
+  nDel = 55; allocate(deltas(1:nDel))
+  deltas = 0.5_dl + 10.**([ (-7.+0.2*(i-1), i=size(deltas),1,-1) ])
   
   ! Values for double well
 !  delta = 0.5_dl
@@ -67,21 +67,10 @@ contains
 
     ! This is all fucked
     if (prev) then
-!       allocate(xNew(0:order))
-!       xNew = chebyshev_grid()
-!       phi_new = interpolate_instanton(xNew,phi_prev,transform,len,w)
-!       phi_i = phi_new
-       ! deallocate(xNew)
     else
-!       r0 = 3._dl*(2.*delta)**0.5
-       r0 = dim*(2.*delta)**0.5
-       meff = (2.*delta)**0.5*(1._dl-0.25_dl/delta**2)**0.5
-!       if (delta > 0.7) then
-!          phi = -2._dl*atan(exp((transform%xGrid-r0)*meff)) + pi ! For Drummond
-!       else
-!          phi = -0.5_dl*(phit-phif)*tanh((transform%xGrid-r0)/w0) + 0.5_dl*(phit+phif)
-!       endif
-       !       call thin_wall_profile()
+!       r0 = dim*(2.*delta)**0.5
+       !       meff = (2.*delta)**0.5*(1._dl-0.25_dl/delta**2)**0.5
+       call bubble_parameters_nd(delta,dim*1._dl,r0,meff)
        if (meff*r0 < 100.) then
 !          phi_i = -2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*tForm%xGrid))  ! other minima
           phi_i = 2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*tForm%xGrid)) + pi
@@ -131,9 +120,8 @@ contains
        delta = delVals(i)
        print*,i,"delta = ",delta, abs(phi(0)-phif)/pi
        if ( abs(phi(0)-phif) < 0.9*abs(phif-phit)) then
-       !if ( phi(0) < 0.9*phit ) then
-          print*,i," prev profile"
           call bubble_parameters_nd(delta,dim*1._dl,r0,meff); call grid_params(w,len,r0,1._dl/meff)
+          print*,i," prev profile", r0, meff
           xNew = chebyshev_grid(ord,len,w)
           phi_prev = interpolate_instanton(xNew,phi,tForm)
           call compute_profile(delta,ord,dim,phi,tForm,phi_prev,out=.true.)
@@ -224,30 +212,22 @@ contains
     real(dl), intent(in) :: delta, dim
     real(dl), intent(out) :: r0, meff
 
-    meff = (2._dl*delta)**0.5
+    meff = (2._dl*delta)**0.5*(1._dl-0.25_dl/delta**2)**0.5
     r0 = dim*(2._dl*delta)**0.5
   end subroutine bubble_parameters_nd
     
   subroutine grid_params(w,len,r0,w0)
     real(dl), intent(out) :: w, len
     real(dl), intent(in) :: r0,w0
-    real(dl), parameter :: wscl = 10._dl
+    real(dl), parameter :: wscl = 5._dl
     len = r0*3._dl**0.5
-    w = wscl * w0 / len 
+    w = wscl * w0 / len
+    if (w0 > r0) then
+       len = w0*3._dl**0.5
+       w = 1._dl
+    endif
   end subroutine grid_params
-    
-  subroutine bubble_params(delta,r0,w0,len,w)
-    real(dl), intent(in) :: delta
-    real(dl), intent(out) :: r0, w0, len, w
-    real(dl) :: meff
-    meff = (2._dl*delta)**0.5*(1._dl-0.25_dl/delta**2)**0.5
-    r0 = 3._dl*(2._dl*delta)**0.5
-    w0 = 1._dl/meff  ! fix this.  Depends on delta in my writing of the potential
-
-    len = r0*3._dl**0.5
-    w = w0/len  ! Adjust this
-  end subroutine bubble_params
-  
+      
   subroutine create_grid(tForm,ord,w,l)
     type(Chebyshev), intent(out) :: tForm
     integer, intent(in) :: ord
