@@ -13,9 +13,9 @@
 !#define POTENTIAL(f) ( 0.25_dl*(f**2-1._dl)**2 + del*(f**3/3._dl-f) )
 !#define VPRIME(f) ( (f+del)*(f**2-1._dl) )
 !#define VDPRIME(f) ( 3._dl*f**2 - 1._dl + 2._dl*del*f )
-#define POTENTIAL(f) ( cos(f) + del*sin(f)**2 + 1._dl )
-#define VPRIME(f) ( -sin(f) + del*sin(2._dl*f) )
-#define VDPRIME(f) ( -cos(f) + 2._dl*del*cos(2._dl*f) )
+#define POTENTIAL(f) ( -cos(f) + del*sin(f)**2 + 1._dl )
+#define VPRIME(f) ( sin(f) + del*sin(2._dl*f) )
+#define VDPRIME(f) ( cos(f) + 2._dl*del*cos(2._dl*f) )
 
 module Model
   use constants

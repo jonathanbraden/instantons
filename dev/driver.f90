@@ -32,13 +32,20 @@ program Instanton
 !  r0 = 1.5_dl*2._dl**0.5/delta; w0=2.**0.5
 !  phif=-1.; phit=1.
 
+  call get_minima(phif,phit)
   order_=100
   allocate(phi(0:order_))
-  call compute_profile(0.5*1.3_dl**2,order_,dim,phi,tForm,out=.true.)
+  call compute_profile(0.5*1.2_dl**2,order_,dim,phi,tForm,out=.true.)
+  call sim_bubble_profile(phi,tForm,0.1_dl,1024,0._dl)
   
   call scan_profiles(deltas,dim,200)
   
 contains
+
+  subroutine get_minima(phif,phit)
+    real(dl), intent(out) :: phif, phit
+    phif = pi; phit = 0._dl
+  end subroutine get_minima
   
   ! GRRR, this thing is all fucked because of the order I need to compute things in.  Design a useful way to modularise it
   
@@ -76,9 +83,11 @@ contains
 !       endif
        !       call thin_wall_profile()
        if (meff*r0 < 100.) then
-          phi_i = -2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*tForm%xGrid)) ! Brutal nonlocality
+!          phi_i = -2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*tForm%xGrid))  ! other minima
+          phi_i = 2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*tForm%xGrid)) + pi
        else
-          phi_i = -2._dl*atan(exp((tForm%xGrid-r0)*meff)) + pi
+          phi_i = 2._dl*atan(exp((tForm%xGrid-r0)*meff))
+!          phi_i = -2._dl*atan(exp((tForm%xGrid-r0)*meff)) + pi  ! other minima
        endif
     endif
   end subroutine initialise_fields
@@ -111,23 +120,25 @@ contains
     real(dl), dimension(0:ord) :: xNew, phi_prev, phi
     integer, parameter :: actFile=80
 
-    phit = pi; phif = 0._dl  ! replace with function call
-    
+    call get_minima(phif,phit)
     open(unit=actFile,file='actions.dat')
 
     delta = delVals(1)
-    call compute_profile(delta,ord,dim,phi,tForm)
+    call compute_profile(delta,ord,dim,phi,tForm,out=.true.)
     write(actFile,*) delta, eval_action(phi,tForm,dim,r0)
     
     do i=2,size(delVals)
        delta = delVals(i)
-       if (phi(0) < 0.9*phit) then
+       print*,i,"delta = ",delta, abs(phi(0)-phif)/pi
+       if ( abs(phi(0)-phif) < 0.9*abs(phif-phit)) then
+       !if ( phi(0) < 0.9*phit ) then
+          print*,i," prev profile"
           call bubble_parameters_nd(delta,dim*1._dl,r0,meff); call grid_params(w,len,r0,1._dl/meff)
           xNew = chebyshev_grid(ord,len,w)
           phi_prev = interpolate_instanton(xNew,phi,tForm)
-          call compute_profile(delta,ord,dim,phi,tForm,phi_prev)
+          call compute_profile(delta,ord,dim,phi,tForm,phi_prev,out=.true.)
        else
-          call compute_profile(delta,ord,dim,phi,tForm)
+          call compute_profile(delta,ord,dim,phi,tForm,out=.true.)
        endif
        write(actFile,*) delta, eval_action(phi,tForm,dim,r0)
     enddo
@@ -154,9 +165,8 @@ contains
     outLoc = .false.; if (present(out)) outLoc = out
     n = order+1
 
-!   call get_minima(phif,phit)
-    phif = 0._dl; phit = pi  ! Replace this with the function call above
-
+   call get_minima(phif,phit)
+    
     call bubble_parameters_nd(delta,dim*1._dl,r0,meff)
     call grid_params(w,len,r0,1._dl/meff)
 
@@ -455,14 +465,15 @@ contains
     integer, intent(in) :: n
 
     real(dl), dimension(1:n) :: xNew, rad, phi_new
-    integer :: i, sz
+    integer :: i
 
-    xNew = (/ ( (i-1)*dx, i=1,n) /)
-    rad = (/ ( abs((i-1)*dx), i=1,n ) /)
-    sz = size(phi)
+    ! Fix for odd number of grid sites
+    xNew = (/ ( (i-1-n/2)*dx, i=1,n) /);
+    rad = (/ ( abs(xNew(i)-rc), i=1,n ) /)
     open(unit=50,file='init_bubble.dat')
-    do i=1,sz
-       write(50,*) phi_new(i)
+    phi_new = interpolate_instanton(rad,phi,tForm)
+    do i=1,n
+       write(50,*) phi_new(i), 0._dl
     enddo
     close(unit=50)
   end subroutine sim_bubble_profile
