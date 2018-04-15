@@ -1,18 +1,18 @@
-program Instanton
+program Instanton_Solve
   use constants
   use Cheby
   use Model
   use Nonlinear_Solver
+  use Instanton_Class
   implicit none
-
-  type Solution
-     type(Chebyshev) :: tForm
-     real(dl), dimension(:), allocatable :: phi
-  end type Solution
   
   real(dl), dimension(:), allocatable :: phi
   real(dl), dimension(:), allocatable :: model_params
-
+  
+  real(dl), dimension(:), allocatable :: x_uniform, phi_int
+  integer, parameter :: n_un = 2048
+  real(dl) :: len_un
+  
   integer :: order_
   integer :: i
 
@@ -22,12 +22,14 @@ program Instanton
   real(dl), allocatable :: deltas(:); integer :: nDel
   integer :: dim
   type(Chebyshev) :: tForm
+
+  type(Instanton) :: inst
   
   dim = 1
   nDel = 55; allocate(deltas(1:nDel))
   deltas = 0.5_dl + 10.**([ (-7.+0.2*(i-1), i=size(deltas),1,-1) ])
   
-  ! Values for double well
+! Values for double well
 !  delta = 0.5_dl
 !  r0 = 1.5_dl*2._dl**0.5/delta; w0=2.**0.5
 !  phif=-1.; phit=1.
@@ -36,9 +38,26 @@ program Instanton
   order_=100
   allocate(phi(0:order_))
   call compute_profile(0.5*1.2_dl**2,order_,dim,phi,tForm,out=.true.)
-  call sim_bubble_profile(phi,tForm,0.1_dl,1024,0._dl)
+
+  ! Figure out how to remove this creation step
+  call create_instanton(inst,order_,dim)
+  call compute_profile_(inst,0.5*1.2_dl**2,order_,dim,out=.true.)
   
-  call scan_profiles(deltas,dim,200)
+  len_un = 50._dl*2._dl**0.5  ! Fix this
+  allocate(x_uniform(1:n_un), phi_int(1:n_un))
+  x_uniform = [ ( (i-1)*(len_un/n_un), i=1,n_un ) ]
+  
+  phi_int = interpolate_instanton(x_uniform,phi,tForm)
+  open(unit=55,file='instanton_interp.dat')
+  do i=n_un,2,-1
+     write(55,*), -x_uniform(i), phi_int(i)
+  enddo
+  do i=1,n_un
+     write(55,*) x_uniform(i), phi_int(i)
+  enddo
+  close(55)
+    
+!  call scan_profiles(deltas,dim,200)
   
 contains
 
@@ -322,7 +341,7 @@ contains
     enddo
     
     if (l.eq.maxit) then
-       print*,"Failed to find local minimum of potential. Adust guess"
+       print*,"Failed to find local minimum of potential. Adjust guess"
        stop
     endif
     print*,"Vacuum is ",fld," derivative is ",vprime(fld)
@@ -428,15 +447,6 @@ contains
     enddo
   end function interpolate_instanton
 
-  !>@brief
-  !> Get the value of the instanton at the origin through interpolation, and use this to extract various quantities that appear in the thin-wall approximation.
-  !> These include
-  !>@arg The energy difference between the center and exterior
-  !>@arg The field value at the center
-  subroutine origin_properties()
-
-  end subroutine origin_properties
-
   ! TO DO : Finish writing this
   subroutine sim_bubble_profile(phi,tForm,dx,n,rc)
     real(dl), dimension(:), intent(in) :: phi
@@ -493,4 +503,4 @@ contains
     xVals = L*xVals / sqrt(1._dl - xVals**2)
   end function chebyshev_grid_lobatto
   
-end program instanton
+end program Instanton_Solve
