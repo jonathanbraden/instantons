@@ -16,7 +16,7 @@ endif
 
 FLIBS= -lm -llapack -lblas
 
-OBJS= constants.o matrix-operations.o chebyshev.o model-canonical.o solver.o instanton.o driver.o
+OBJS= constants.o utils.o matrix-operations.o chebyshev.o model-canonical.o solver.o instanton.o driver.o
 
 instanton: %: $(OBJS)
 	$(FC) $(FFLAGS) -o instanton $(OBJS) $(FLIBS)
