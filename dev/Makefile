@@ -30,3 +30,6 @@ clean:
 	rm -f *.o
 	rm -f *.mod
 	rm -f instanton
+
+cleandat:
+	rm -f actions.dat instanton.dat solver-output.dat instanton_interp.dat instanton_.dat
