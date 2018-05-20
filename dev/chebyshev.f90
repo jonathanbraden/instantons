@@ -97,12 +97,6 @@ module Cheby
      logical :: init=.false.
   end type Chebyshev
 
-!  abstract interface 
-!     real(dl) function xnew(x) 
-!       real(dl), intent(in) :: x
-!     end function xnew
-!  end interface
-
 contains
 
 !#ifdef INCLUDE_FUNCTIONS
@@ -132,8 +126,7 @@ contains
     logical, intent(in) :: evens
     real(dl), intent(in), optional :: w
 
-    tForm = new_chebyshev_finite(ord,.true.)
-    if (evens) call transform_to_evens(tForm)
+    tForm = new_chebyshev_finite(ord,evens)
     if (present(w)) call cluster_points(tForm,w,evens)
     call transform_double_infinite(tForm,len)
   end function chebyshev_double_infinite
@@ -200,6 +193,22 @@ contains
   end subroutine create_chebyshev
 
   !>@brief
+  !> Free the memory stored in the input Chebyshev object
+  !>
+  !>@param[inout] this
+  subroutine destroy_chebyshev(this)
+    type(Chebyshev), intent(inout) :: this
+
+    if (this%init) then
+       this%nx = -1; this%ord = -1; this%nDeriv = -1
+       deallocate(this%xGrid,this%weights,this%norm)
+       deallocate(this%fTrans,this%invTrans)
+       deallocate(this%derivs)
+    endif
+    this%init = .false.
+  end subroutine destroy_chebyshev
+  
+  !>@brief
   !> Allocate space in our transformation to store grid points, weights, derivative matrices, etc.
   !>
   !>@param[out] this
@@ -217,7 +226,7 @@ contains
 
     allocate( this%wFunc(0:ord) )
   end subroutine allocate_chebyshev
-    
+  
   !>@brief
   !> Copy the contents of an existing transform
   !>
@@ -332,22 +341,6 @@ contains
     endif    
   end subroutine make_mmt
   
-  !>@brief
-  !> Free the memory stored in the input Chebyshev object
-  !>
-  !>@param[inout] this
-  subroutine destroy_chebyshev(this)
-    type(Chebyshev), intent(inout) :: this
-
-    if (this%init) then
-       this%nx = -1; this%ord = -1; this%nDeriv = -1
-       deallocate(this%xGrid,this%weights,this%norm)
-       deallocate(this%fTrans,this%invTrans)
-       deallocate(this%derivs)
-    endif
-    this%init=.false.
-  end subroutine destroy_chebyshev
-
   !>@brief
   !> Evaluate the given function via numerical quadrature
   !>
@@ -549,7 +542,7 @@ contains
        fNew(i) = sum(B_tmp(0:o,0)*spec(0:o))  ! use evaluate_chebyshev
     enddo
   end subroutine interpolate
-
+  
 ! Add Gauss-Cheby and Gauss-Lobatto nodes
 ! These are all fucked up from the point of view of actually doing quadrature.
   ! There are missing factors due to the normalisation of the Chebyshevs
