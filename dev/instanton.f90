@@ -4,21 +4,14 @@ module Instanton_Class
   use Model  ! Try to remove this dependence
   use Nonlinear_Solver
   implicit none
-
-  type ThinWall
-     real(dl) :: r0, meff, w
-  end type ThinWall
-
-  type Solution
-     type(Chebyshev) :: tForm
-     real(dl), dimension(:), allocatable :: phi
-  end type Solution
   
   type Instanton
      type(Chebyshev) :: tForm
-     type(ThinWall) :: tw
      real(dl), dimension(:), allocatable :: phi
+     integer :: ord
      integer :: dim
+     real(dl) :: r0, meff, w
+     logical :: exists = .false.
   end type Instanton
   
 contains
@@ -26,18 +19,43 @@ contains
   subroutine create_instanton(this,ord,d)
     type(Instanton), intent(out) :: this
     integer, intent(in) :: ord,d
-
+    this%dim = d; this%ord = ord
+    if (allocated(this%phi)) deallocate(this%phi) ! Remove this to only allocate if size has changed
     allocate(this%phi(0:ord))
-    this%dim = d
+    this%exists = .true.
   end subroutine create_instanton
 
-!  function interpolate_instanton(r_new,this) result(f_int)
-!    real(dl), dimension(:), intent(in) :: r_new
-!    type(Instanton), intent(in) :: this
-!    real(dl), dimension(1:size(r_new)) :: f_int
+  subroutine destroy_instanton(this)
+    type(Instanton), intent(inout) :: this
+    if (.not.this%exists) return
+    deallocate(this%phi)
+    this%exists = .false.
+  end subroutine destroy_instanton
+  
+  function interpolate_instanton_(this,r_new) result(f_int)
+    type(Instanton), intent(in) :: this
+    real(dl), dimension(:), intent(in) :: r_new
+    real(dl), dimension(1:size(r_new)) :: f_int
 
-    ! Write this and debug it
-!  end function interpolate_instanton
+    real(dl) :: L,w
+    real(dl) :: xvals(1:size(r_new)), spec(1:this%tForm%ord+1), bVals(1:this%tForm%ord+1,0:2)
+    integer :: i; real(dl) :: winv
+    
+    w = this%tForm%scl; L = this%tForm%len
+    winv = 1._dl/w
+    xvals = r_new / sqrt(r_new**2+L**2)
+    xvals = atan(winv*tan(pi*(xvals-0.5_dl)))/pi + 0.5_dl
+    xvals = 2._dl*xvals**2 - 1._dl
+#ifdef USEBLAS
+    spec = 
+#else
+    spec = matmul(this%tForm%fTrans,this%phi)
+#endif
+    do i=1,size(r_new)
+       call evaluate_chebyshev(this%tForm%ord,xvals(i),bVals,2)
+       f_int(i) = sum(spec*bVals(:,0))
+    enddo
+  end function interpolate_instanton_
   
   !TO DO: This doesn't give the potential correctly since I need phif
   subroutine output_instanton(this)
@@ -74,7 +92,7 @@ contains
     integer :: ord
 
     ord = size(this%phi)-1
-    d = dble(this%dim); r0 = this%tw%r0
+    d = dble(this%dim); r0 = this%r0
     allocate( dfld(0:ord), lag(0:ord) )
     phif = this%phi(ord)  ! fix this
     
@@ -91,21 +109,21 @@ contains
     deallocate(dfld,lag)
   end function compute_action_
 
-  subroutine compute_profile_(this,delta,order,dim,phi_init,out)
+  subroutine compute_profile_(this,delta,phi_init,out)
     type(Instanton), intent(inout) :: this
     real(dl), intent(in) :: delta
-    integer, intent(in) :: order, dim
-    real(dl), intent(in), optional :: phi_init(0:order)
+    real(dl), intent(in), optional :: phi_init(0:this%ord)
     logical, intent(in), optional :: out
 
-    ! Clean up all this extraneous crap
-    logical :: outLoc
+    logical :: outLoc; integer :: order, dim, n
     type(Solver) :: solv
-    real(dl) :: w, len
-    real(dl) :: r0, meff
-    real(dl) :: phif, phit
-    integer :: n
 
+    ! Clean up all this extraneous crap
+    real(dl) :: w, len  ! These seem extraneous
+    real(dl) :: r0, meff ! These seem extraneous
+    real(dl) :: phif, phit ! These also do
+
+    dim = this%dim; order = this%ord
     outLoc = .false.; if (present(out)) outLoc = out
     n = order+1
 
@@ -138,6 +156,7 @@ contains
   !> Given specified radius and width of a bubble profile, adjust grid mapping parameters.
   !>
   !> The relationship between the radius and mapping length are fixed by choice of polynomials
+  !> Should probably be moved into the chebyshev class
   subroutine grid_params_(w,len,r0,w0)
     real(dl), intent(out) :: w, len
     real(dl), intent(in) :: r0, w0
@@ -151,7 +170,8 @@ contains
     endif
   end subroutine grid_params_
 
-      
+!!!! This functionality should be moved into the chebyshev code
+!!! I'm pretty sure it's in there already, so just kill this an use the call in the library
   subroutine create_grid_(tForm,ord,w,l)
     type(Chebyshev), intent(out) :: tForm
     integer, intent(in) :: ord
@@ -163,6 +183,7 @@ contains
     call transform_double_infinite(tForm,l)
   end subroutine create_grid_
 
+  !!!! Model dependent
   subroutine bubble_parameters_nd_(delta,dim,r0,meff)
     real(dl), intent(in) :: delta, dim
     real(dl), intent(out) :: r0, meff
@@ -174,9 +195,6 @@ contains
 !!!!!!!!!!!!!!
   ! Clean these next few up so they aren't so ugly
   !!!!!!!!!!!!!
-  
-  ! GRRR, this thing is all fucked because of the order I need to compute things in.  Design a useful way to modularise it
-  
   !>@brief
   !> Initialise our initial guess for the instanton profile
   !>

@@ -1,9 +1,9 @@
 program Instanton_Solve
   use constants
+  use Utils, only : newunit
   use Cheby
   use Model
   use Nonlinear_Solver
-  use Instanton_Class
   implicit none
   
   real(dl), dimension(:), allocatable :: phi
@@ -14,7 +14,7 @@ program Instanton_Solve
   real(dl) :: len_un
   
   integer :: order_
-  integer :: i
+  integer :: i, u
 
   real(dl) :: phit, phif  ! kill these to restore locality, currently used in output subroutine
   
@@ -23,41 +23,39 @@ program Instanton_Solve
   integer :: dim
   type(Chebyshev) :: tForm
 
-  type(Instanton) :: inst
-  
-  dim = 1
-  nDel = 55; allocate(deltas(1:nDel))
-  deltas = 0.5_dl + 10.**([ (-7.+0.2*(i-1), i=size(deltas),1,-1) ])
-  
 ! Values for double well
 !  delta = 0.5_dl
 !  r0 = 1.5_dl*2._dl**0.5/delta; w0=2.**0.5
 !  phif=-1.; phit=1.
+  
+  dim = 1
+  nDel = 55; allocate(deltas(1:nDel))
+  deltas = 0.5_dl + 10.**([ (-7.+0.2*(i-1), i=size(deltas),1,-1) ])
 
+  ! For BEC paper
+!  nDel = 6; allocate(deltas(1:nDel))
+!  deltas = 0.5_dl*([ 1.2, 1.3, 1.4, 1.5, 1.55, 1.6 ])**2
+  
   call get_minima(phif,phit)
   order_=100
   allocate(phi(0:order_))
   call compute_profile(0.5*1.2_dl**2,order_,dim,phi,tForm,out=.true.)
-
-  ! Figure out how to remove this creation step
-  call create_instanton(inst,order_,dim)
-  call compute_profile_(inst,0.5*1.2_dl**2,order_,dim,out=.true.)
   
   len_un = 50._dl*2._dl**0.5  ! Fix this
   allocate(x_uniform(1:n_un), phi_int(1:n_un))
   x_uniform = [ ( (i-1)*(len_un/n_un), i=1,n_un ) ]
   
   phi_int = interpolate_instanton(x_uniform,phi,tForm)
-  open(unit=55,file='instanton_interp.dat')
+  open(unit=newunit(u),file='instanton_interp.dat')
   do i=n_un,2,-1
-     write(55,*), -x_uniform(i), phi_int(i)
+     write(u,*) -x_uniform(i), phi_int(i)
   enddo
   do i=1,n_un
-     write(55,*) x_uniform(i), phi_int(i)
+     write(u,*) x_uniform(i), phi_int(i)
   enddo
-  close(55)
+  close(u)
     
-!  call scan_profiles(deltas,dim,200)
+  !call scan_profiles(deltas,dim,200)
   
 contains
 
@@ -65,135 +63,7 @@ contains
     real(dl), intent(out) :: phif, phit
     phif = pi; phit = 0._dl
   end subroutine get_minima
-  
-  ! GRRR, this thing is all fucked because of the order I need to compute things in.  Design a useful way to modularise it
-  
-  !>@brief
-  !> Initialise our initial guess for the instanton profile
-  !>
-  !>@param[in] prev  If True - initialise profile using previous numerical profile
-  !>                 If False - initialise using an analytic formula
-  subroutine initialise_fields(phi_i,delta,prev,tForm,w,len,phi_prev)
-    real(dl), dimension(:), intent(out) :: phi_i
-    real(dl), intent(in) :: delta
-    logical, intent(in) :: prev
-    type(Chebyshev), intent(in) :: tForm
-    real(dl), intent(in), optional :: w,len
-    real(dl), intent(in), optional :: phi_prev
-    real(dl) :: r0, meff
-    real(dl) :: phi_new(1:size(phi_i))
-    real(dl), allocatable :: xNew(:)
 
-    ! This is all fucked
-    if (prev) then
-    else
-!       r0 = dim*(2.*delta)**0.5
-       !       meff = (2.*delta)**0.5*(1._dl-0.25_dl/delta**2)**0.5
-       call bubble_parameters_nd(delta,dim*1._dl,r0,meff)
-       if (meff*r0 < 100.) then
-!          phi_i = -2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*tForm%xGrid))  ! other minima
-          phi_i = 2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*tForm%xGrid)) + pi
-       else
-          phi_i = 2._dl*atan(exp((tForm%xGrid-r0)*meff))
-!          phi_i = -2._dl*atan(exp((tForm%xGrid-r0)*meff)) + pi  ! other minima
-       endif
-    endif
-  end subroutine initialise_fields
-  
-  subroutine initial_profile(phi,delta,phi_prev)
-    type(Solution), intent(out) :: phi, phi_prev
-    real(dl), intent(in) :: delta
-    real(dl) :: r0, meff
-
-    r0 = 3._dl*(delta*2._dl)**0.5
-    meff = (delta*2._dl)**0.5*(1._dl-0.25/delta**2)**0.5
-!    if (meff*r0 < 1.) then
-    if (.false.) then
-    ! Add interpolation and condition above
-    else
-       call breather_profile(phi%tForm%xGrid,phi%phi,r0,1./meff)  ! ugly nonlocality with transform
-    endif       
-  end subroutine initial_profile
-
-!!!! TO FIX: nonlocality of w,r0,len,meff in this subroutine
-  !!!! Extra calls to create chebyshev grids
-  subroutine scan_profiles(delVals,dim,ord)
-    real(dl), dimension(:), intent(in) :: delVals
-    integer, intent(in) :: dim, ord
-
-    type(Chebyshev) :: tForm
-    real(dl) :: delta
-    real(dl) :: w, len, r0, meff
-    real(dl) :: phit, phif
-    real(dl), dimension(0:ord) :: xNew, phi_prev, phi
-    integer, parameter :: actFile=80
-
-    call get_minima(phif,phit)
-    open(unit=actFile,file='actions.dat')
-
-    delta = delVals(1)
-    call compute_profile(delta,ord,dim,phi,tForm,out=.true.)
-    write(actFile,*) delta, eval_action(phi,tForm,dim,r0)
-    
-    do i=2,size(delVals)
-       delta = delVals(i)
-       print*,i,"delta = ",delta, abs(phi(0)-phif)/pi
-       if ( abs(phi(0)-phif) < 0.9*abs(phif-phit)) then
-          call bubble_parameters_nd(delta,dim*1._dl,r0,meff); call grid_params(w,len,r0,1._dl/meff)
-          print*,i," prev profile", r0, meff
-          xNew = chebyshev_grid(ord,len,w)
-          phi_prev = interpolate_instanton(xNew,phi,tForm)
-          call compute_profile(delta,ord,dim,phi,tForm,phi_prev,out=.true.)
-       else
-          call compute_profile(delta,ord,dim,phi,tForm,out=.true.)
-       endif
-       write(actFile,*) delta, eval_action(phi,tForm,dim,r0)
-    enddo
-    close(actFile)
-  end subroutine scan_profiles
-  
-  !>@brief
-  !> Solve for a single bubble profile.  Optionally, store the output field values, derivatives, potential, etc. in a file.
-  subroutine compute_profile(delta, order, dim, phi, tForm, phi_init, out)
-    real(dl), intent(in) :: delta
-    integer, intent(in) :: order, dim
-    real(dl), dimension(0:order), intent(out) :: phi
-    type(Chebyshev), intent(out) :: tForm
-    real(dl), intent(in), optional :: phi_init(0:order)
-    logical, intent(in), optional :: out
-
-    logical :: outLoc
-    type(Solver) :: solv
-    real(dl) :: w,len         ! Collocation grid parameters
-    real(dl) :: r0, meff  ! Bubble Parameters
-    real(dl) :: phif, phit    ! Move this elsewhere
-    integer :: n
-
-    outLoc = .false.; if (present(out)) outLoc = out
-    n = order+1
-
-   call get_minima(phif,phit)
-    
-    call bubble_parameters_nd(delta,dim*1._dl,r0,meff)
-    call grid_params(w,len,r0,1._dl/meff)
-
-    ! The way transform is used here is ugly and nonlocal.  Fix it!!!
-!    call destroy_chebyshev(transform)
-    call create_grid(tForm,order,w,len)
-    call create_solver(solv,n,100,0.1_dl)
-    call initialise_equations(tForm,delta,dim)
-    
-    ! Modularise this part
-    if (present(phi_init)) then
-       phi(0:order) = phi_init(0:order)
-    else
-!!! Need to fix this now, since I have a different meff in the subroutine
-       call initialise_fields(phi,delta,.false.,tForm)  ! Replace this with a call to thin-wall profile or something
-    endif
-    call solve(solv,phi)
-
-    if (outLoc) call output_simple(tForm,phi,.false.)
-  end subroutine compute_profile
 
   !>@brief
   !> Compute the thin wall profile.  This will be more easily stored in the model subroutine
@@ -212,7 +82,7 @@ contains
     real(dl), intent(in) :: r0,w0
     real(dl) :: meff
 
-    meff = 1._dl/20
+    meff = 1._dl/20  ! Why is this hardcoded?
     phi = -2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*rvals))
   end subroutine breather_profile
   
@@ -257,6 +127,172 @@ contains
     call cluster_points(tForm,w,.true.)
     call transform_double_infinite(tForm,l)
   end subroutine create_grid
+  
+  ! GRRR, this thing is all fucked because of the order I need to compute things in.  Design a useful way to modularise it
+  
+  !>@brief
+  !> Initialise our initial guess for the instanton profile
+  !>
+  !>@param[in] prev  If True - initialise profile using previous numerical profile
+  !>                 If False - initialise using an analytic formula
+  subroutine initialise_fields(phi_i,delta,prev,tForm,w,len,phi_prev)
+    real(dl), dimension(:), intent(out) :: phi_i
+    real(dl), intent(in) :: delta
+    logical, intent(in) :: prev
+    type(Chebyshev), intent(in) :: tForm
+    real(dl), intent(in), optional :: w,len
+    real(dl), intent(in), optional :: phi_prev
+    real(dl) :: r0, meff
+    real(dl) :: phi_new(1:size(phi_i))
+    real(dl), allocatable :: xNew(:)
+
+    ! This is all fucked
+    if (prev) then
+    else
+!       r0 = dim*(2.*delta)**0.5
+       !       meff = (2.*delta)**0.5*(1._dl-0.25_dl/delta**2)**0.5
+       call bubble_parameters_nd(delta,dim*1._dl,r0,meff)
+       if (meff*r0 < 100.) then
+!          phi_i = -2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*tForm%xGrid))  ! other minima
+          phi_i = 2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*tForm%xGrid)) + pi
+       else
+          phi_i = 2._dl*atan(exp((tForm%xGrid-r0)*meff))
+!          phi_i = -2._dl*atan(exp((tForm%xGrid-r0)*meff)) + pi  ! other minima
+       endif
+    endif
+  end subroutine initialise_fields
+
+#ifdef CLASS
+  subroutine initial_profile(phi,delta,phi_prev)
+    type(Instanton), intent(out) :: phi, phi_prev
+    real(dl), intent(in) :: delta
+    real(dl) :: r0, meff
+
+    r0 = 3._dl*(delta*2._dl)**0.5
+    meff = (delta*2._dl)**0.5*(1._dl-0.25/delta**2)**0.5
+!    if (meff*r0 < 1.) then
+    if (.false.) then
+    ! Add interpolation and condition above
+    else
+       call breather_profile(phi%tForm%xGrid,phi%phi,r0,1./meff)  ! ugly nonlocality with transform
+    endif       
+  end subroutine initial_profile
+
+  !>@brief
+  !> Obtain instanton profiles and actions over the prescribed range of potential parameters
+  subroutine scan_profiles_(delVals,dim,ord)
+    real(dl), dimension(:), intent(in) :: delVals
+    integer, intent(in) :: dim, ord
+
+    type(Instanton) :: inst
+    real(dl) :: delta
+
+    real(dl) :: w, len, r0, meff
+    real(dl) :: phit, phif
+    real(dl), dimension(0:ord) :: xNew, phi_prev, phi
+    integer :: i,u
+    
+    open(unit=newunit(u),file='actions.dat')
+    call create_instanton(inst,ord,dim)
+
+    delta = delVals(1)
+    call compute_profile_(inst,delta,out=.false.)
+    write(u,*) delta, compute_action_(inst)
+    
+    do i=2,size(delVals)
+       delta = delVals(i)
+!       call get_minima(phif,phit)  
+       if ( abs(phi(0)-phif) < 0.9*abs(phif-phit) ) then
+          call bubble_parameters_nd(delta,dim*1._dl,r0,meff); call grid_params(w,len,r0,1._dl/meff)
+          ! Add initialisatin using previous profile
+       else
+          call compute_profile_(inst,delta,out=.false.)
+       endif
+       write(u,*) delta, compute_action_(inst)
+    enddo
+    close(u)
+  end subroutine scan_profiles_
+#endif
+  
+!!!! TO FIX: nonlocality of w,r0,len,meff in this subroutine
+  !!!! Extra calls to create chebyshev grids
+  subroutine scan_profiles(delVals,dim,ord)
+    real(dl), dimension(:), intent(in) :: delVals
+    integer, intent(in) :: dim, ord
+
+    type(Chebyshev) :: tForm
+    real(dl) :: delta
+    real(dl) :: w, len, r0, meff
+    real(dl) :: phit, phif
+    real(dl), dimension(0:ord) :: xNew, phi_prev, phi
+    integer :: actFile
+
+    call get_minima(phif,phit)  ! In general this depends on the potential parameters
+    open(unit=newunit(actFile),file='actions.dat')
+
+    delta = delVals(1)
+    call compute_profile(delta,ord,dim,phi,tForm,out=.true.)
+    write(actFile,*) delta, eval_action(phi,tForm,dim,r0)
+    
+    do i=2,size(delVals)
+       delta = delVals(i)
+       print*,i,"delta = ",delta, abs(phi(0)-phif)/pi
+       if ( abs(phi(0)-phif) < 0.9*abs(phif-phit)) then
+          call bubble_parameters_nd(delta,dim*1._dl,r0,meff); call grid_params(w,len,r0,1._dl/meff)
+          print*,i," prev profile", r0, meff
+          xNew = chebyshev_grid(ord,len,w)
+          phi_prev = interpolate_instanton(xNew,phi,tForm)
+          call compute_profile(delta,ord,dim,phi,tForm,phi_prev,out=.true.)
+       else
+          call compute_profile(delta,ord,dim,phi,tForm,out=.true.)
+       endif
+       write(actFile,*) delta, eval_action(phi,tForm,dim,r0)
+    enddo
+    close(actFile)
+  end subroutine scan_profiles
+  
+  !>@brief
+  !> Solve for a single bubble profile.  Optionally, store the output field values, derivatives, potential, etc. in a file.
+  subroutine compute_profile(delta, order, dim, phi, tForm, phi_init, out)
+    real(dl), intent(in) :: delta
+    integer, intent(in) :: order, dim
+    real(dl), dimension(0:order), intent(out) :: phi
+    type(Chebyshev), intent(out) :: tForm
+    real(dl), intent(in), optional :: phi_init(0:order)
+    logical, intent(in), optional :: out
+
+    logical :: outLoc
+    type(Solver) :: solv
+    real(dl) :: w,len         ! Collocation grid parameters
+    real(dl) :: r0, meff  ! Bubble Parameters
+    real(dl) :: phif, phit    ! Move this elsewhere
+    integer :: n
+
+    outLoc = .false.; if (present(out)) outLoc = out
+    n = order+1
+
+    call get_minima(phif,phit)
+    
+    call bubble_parameters_nd(delta,dim*1._dl,r0,meff)
+    call grid_params(w,len,r0,1._dl/meff)
+
+    ! The way transform is used here is ugly and nonlocal.  Fix it!!!
+!    call destroy_chebyshev(transform)
+    call create_grid(tForm,order,w,len)
+    call create_solver(solv,n,100,0.1_dl)
+    call initialise_equations(tForm,delta,dim)
+    
+    ! Modularise this part
+    if (present(phi_init)) then
+       phi(0:order) = phi_init(0:order)
+    else
+!!! Need to fix this now, since I have a different meff in the subroutine
+       call initialise_fields(phi,delta,.false.,tForm)  ! Replace this with a call to thin-wall profile or something
+    endif
+    call solve(solv,phi)
+
+    if (outLoc) call output_simple(tForm,phi,.false.)
+  end subroutine compute_profile
 
   !! This is super wasteful if we are going to interpolate onto the same grid many times
   !! If we are, should store the interpolation matrix separately and just do matrix multiplies
@@ -279,6 +315,32 @@ contains
     deallocate(phi_spec)
   end subroutine interpolate_phi
 
+  ! This doesn't seem to be working yet
+  function interpolate_instanton(r_new,f_cur,tForm) result(f_int)
+    real(dl), dimension(:), intent(in) :: r_new, f_cur
+    type(Chebyshev), intent(in) :: tForm
+    real(dl), dimension(1:size(r_new)) :: f_int
+
+    real(dl) :: L,w
+    real(dl) :: xvals(1:size(r_new)), spec(1:size(f_cur)),  bVals(1:size(f_cur),0:2)
+    integer :: i; real(dl) :: winv
+
+    w = tForm%scl; L = tForm%len
+    winv = 1._dl/w
+    xvals = r_new / sqrt(r_new**2+L**2)
+    xvals = atan(winv*tan(pi*(xvals-0.5_dl)))/pi + 0.5_dl
+    xvals = 2._dl*xvals**2-1._dl
+#ifdef USEBLAS
+    call DGEMV
+#else
+    spec = matmul(tForm%fTrans,f_cur)
+#endif
+    do i=1,size(r_new)
+       call evaluate_chebyshev(tForm%ord,xvals(i),bVals,2)
+       f_int(i) = sum(spec*bVals(:,0))
+    enddo
+  end function interpolate_instanton
+  
   !>@brief
   !> Get the eigenvalues around the instanton solution on the original collocation grid
   subroutine get_evalues(phi,n,init)
@@ -421,32 +483,6 @@ contains
     ! Add in the "thin-wall potential" here
   end function eval_action
 
-  ! This doesn't seem to be working yet
-  function interpolate_instanton(r_new,f_cur,tForm) result(f_int)
-    real(dl), dimension(:), intent(in) :: r_new, f_cur
-    type(Chebyshev), intent(in) :: tForm
-    real(dl), dimension(1:size(r_new)) :: f_int
-
-    real(dl) :: L,w
-    real(dl) :: xvals(1:size(r_new)), spec(1:size(f_cur)),  bVals(1:size(f_cur),0:2)
-    integer :: i; real(dl) :: winv
-
-    w = tForm%scl; L = tForm%len
-    winv = 1._dl/w
-    xvals = r_new / sqrt(r_new**2+L**2)
-    xvals = atan(winv*tan(pi*(xvals-0.5_dl)))/pi + 0.5_dl
-    xvals = 2._dl*xvals**2-1._dl
-#ifdef USEBLAS
-
-#else
-    spec = matmul(tForm%fTrans,f_cur)
-#endif
-    do i=1,size(r_new)
-       call evaluate_chebyshev(tForm%ord,xvals(i),bVals,2)
-       f_int(i) = sum(spec*bVals(:,0))
-    enddo
-  end function interpolate_instanton
-
   ! TO DO : Finish writing this
   subroutine sim_bubble_profile(phi,tForm,dx,n,rc)
     real(dl), dimension(:), intent(in) :: phi
@@ -455,19 +491,19 @@ contains
     integer, intent(in) :: n
 
     real(dl), dimension(1:n) :: xNew, rad, phi_new
-    integer :: i
+    integer :: i, u
 
     ! Fix for odd number of grid sites
     xNew = (/ ( (i-1-n/2)*dx, i=1,n) /);
     rad = (/ ( abs(xNew(i)-rc), i=1,n ) /)
-    open(unit=50,file='init_bubble.dat')
+    open(unit=newunit(u),file='init_bubble.dat')
     phi_new = interpolate_instanton(rad,phi,tForm)
     do i=1,n
-       write(50,*) phi_new(i), 0._dl
+       write(u,*) phi_new(i), 0._dl
     enddo
-    close(unit=50)
+    close(unit=u)
   end subroutine sim_bubble_profile
-  
+
   !>@brief
   !> Return the collocation grid for even Chebyshevs on the doubly-infinite interval with clustering
   function chebyshev_grid(order,L,w) result(xVals)
