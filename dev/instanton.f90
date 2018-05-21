@@ -57,7 +57,7 @@ contains
     enddo
   end function interpolate_instanton_
   
-  !TO DO: This doesn't give the potential correctly since I need phif
+  !TO DO: phif is extracted from the solution, not from input.
   subroutine output_instanton(this)
     type(Instanton), intent(in) :: this
 
@@ -135,7 +135,7 @@ contains
     call bubble_parameters_nd_(delta,dim*1._dl,r0,meff)
     call grid_params_(w,len,r0,1._dl/meff)
 
-    call create_grid_(this%tForm,order,w,len)
+    call create_grid_(this%tForm,order,w,len) ! Replace this with the library call
     call create_solver(solv,n,100,0.1_dl)
     call initialise_equations(this%tForm,delta,dim)
     
@@ -149,7 +149,6 @@ contains
     call solve(solv,this%phi)
 
     if (outLoc) call output_instanton(this)
-
   end subroutine compute_profile_
 
   !>@brief
