@@ -17,9 +17,35 @@ program Instanton_Solver
   
   call create_instanton(inst,100,1)
   call compute_profile_(inst,0.5*1.2_dl**2,out=.true.)
+
+  call interp_uniform(inst,2048,50._dl*2._dl**0.5)
   
 contains
 
+  !>@brief
+  !> Interpolate the instanton profile onto a uniform grid for external simulation
+  subroutine interp_uniform(this,nlat,len)
+    type(Instanton), intent(in) :: this
+    integer, intent(in) :: nlat
+    real(dl), intent(in) :: len
+
+    integer :: u, i, n
+    real(dl), dimension(1:nlat) :: r, phi_i
+    n = (nlat+1)/2
+    
+    r = [ ( (i-1)*(len/nlat), i=1,nlat) ]
+    phi_i = interpolate_instanton_(this,r)
+    
+    open(unit=newunit(u), file='instanton_interp_.dat')
+    do i=nlat,2,-1
+       write(u,*) -r(i), phi_i(i)
+    enddo
+    do i=1,nlat
+       write(u,*) r(i), phi_i(i)
+    enddo
+    close(u)
+  end subroutine interp_uniform
+  
   !>@todo Write this an include the adjustment of the initial bubble profile
   subroutine scan_profiles_(deltas,dim,ord,out)
     real(dl), dimension(:), intent(in) :: deltas
@@ -50,6 +76,5 @@ contains
     enddo
     close(u)
   end subroutine scan_profiles_
-    
   
 end program Instanton_Solver

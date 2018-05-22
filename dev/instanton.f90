@@ -60,13 +60,14 @@ contains
   !TO DO: phif is extracted from the solution, not from input.
   subroutine output_instanton(this)
     type(Instanton), intent(in) :: this
-
+    
     real(dl), dimension(:), allocatable :: phi_spec, dphi, d2phi
-    integer, parameter :: u = 56  ! Fix this to open next available file
     logical :: o
     integer :: i, sz
     real(dl) :: phif
 
+    integer, parameter :: u = 56
+    
     inquire(opened=o,unit=u)
     if (.not.o) open(unit=u,file='instanton_.dat')
 
@@ -119,9 +120,9 @@ contains
     type(Solver) :: solv
 
     ! Clean up all this extraneous crap
-    real(dl) :: w, len  ! These seem extraneous
-    real(dl) :: r0, meff ! These seem extraneous
-    real(dl) :: phif, phit ! These also do
+    real(dl) :: w, len      ! These seem extraneous
+    real(dl) :: r0, meff    ! These seem extraneous
+    real(dl) :: phif, phit  ! These also do
 
     dim = this%dim; order = this%ord
     outLoc = .false.; if (present(out)) outLoc = out

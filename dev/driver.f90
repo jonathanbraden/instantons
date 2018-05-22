@@ -59,11 +59,32 @@ program Instanton_Solve
   
 contains
 
+  ! TO DO : Finish writing this
+  subroutine sim_bubble_profile(phi,tForm,n,len,rc)
+    real(dl), dimension(:), intent(in) :: phi
+    type(Chebyshev), intent(in) :: tForm
+    real(dl), intent(in) :: len, rc
+    integer, intent(in) :: n
+
+    real(dl), dimension(1:n) :: xNew, rad, phi_new
+    integer :: i, u
+
+    ! Fix for odd number of grid sites
+    xNew = (/ ( (i-1-n/2)*dx, i=1,n) /);
+    rad = (/ ( abs(xNew(i)-rc), i=1,n ) /)
+    
+    open(unit=newunit(u),file='init_bubble.dat')
+    phi_new = interpolate_instanton(rad,phi,tForm)
+    do i=1,n
+       write(u,*) phi_new(i), 0._dl
+    enddo
+    close(unit=u)
+  end subroutine sim_bubble_profile
+  
   subroutine get_minima(phif,phit)
     real(dl), intent(out) :: phif, phit
     phif = pi; phit = 0._dl
   end subroutine get_minima
-
 
   !>@brief
   !> Compute the thin wall profile.  This will be more easily stored in the model subroutine
@@ -482,27 +503,6 @@ contains
     action(7) = quadrature(tForm,fld*vprime(fld)*tForm%xGrid(:)**d)
     ! Add in the "thin-wall potential" here
   end function eval_action
-
-  ! TO DO : Finish writing this
-  subroutine sim_bubble_profile(phi,tForm,dx,n,rc)
-    real(dl), dimension(:), intent(in) :: phi
-    type(Chebyshev), intent(in) :: tForm
-    real(dl), intent(in) :: dx, rc
-    integer, intent(in) :: n
-
-    real(dl), dimension(1:n) :: xNew, rad, phi_new
-    integer :: i, u
-
-    ! Fix for odd number of grid sites
-    xNew = (/ ( (i-1-n/2)*dx, i=1,n) /);
-    rad = (/ ( abs(xNew(i)-rc), i=1,n ) /)
-    open(unit=newunit(u),file='init_bubble.dat')
-    phi_new = interpolate_instanton(rad,phi,tForm)
-    do i=1,n
-       write(u,*) phi_new(i), 0._dl
-    enddo
-    close(unit=u)
-  end subroutine sim_bubble_profile
 
   !>@brief
   !> Return the collocation grid for even Chebyshevs on the doubly-infinite interval with clustering
