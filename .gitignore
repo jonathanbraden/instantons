@@ -11,3 +11,6 @@
 
 # Data files
 *.dat
+
+# Python Binaries
+*.pyc
