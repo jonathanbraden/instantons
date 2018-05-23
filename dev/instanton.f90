@@ -143,8 +143,6 @@ contains
     if (present(phi_init)) then
        this%phi(0:order) = phi_init(0:order)
     else
-!!! Need to fix this now, since I have a different meff in the subroutine
-       !       call initialise_fields_(this%phi,delta,dim,.false.,this%tForm)  ! FIX THIS
        call profile_guess(this,r0,meff,phif,phit,1)
     endif
     call solve(solv,this%phi)
@@ -211,10 +209,8 @@ contains
        !call atan_profile(this%tForm%xGrid,this%phi,r0,meff,phif,phit)
        this%phi(:) = atan_p(this%tForm%xGrid(:),r0,meff,phif,phit)
     case default
-       this%phi(:) = 2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*this%tForm%xGrid(:))) + pi
+       this%phi(:) = breather_p(this%tForm%xGrid(:),r0,meff,phif,phit)
     end select
-    !call breather_profile(this%tForm%xGrid,this%phi,r0,w)
-    ! this%phi(:) = 2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*this%xGrid(:)) + pi
   end subroutine profile_guess
 
   elemental function breather_p(x,r0,m,phif,phit) result(f)
