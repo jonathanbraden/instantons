@@ -55,7 +55,7 @@ program Instanton_Solve
   enddo
   close(u)
     
-  !call scan_profiles(deltas,dim,200)
+  call scan_profiles(deltas,dim,200)
   
 contains
 
@@ -184,58 +184,6 @@ contains
        endif
     endif
   end subroutine initialise_fields
-
-#ifdef CLASS
-  subroutine initial_profile(phi,delta,phi_prev)
-    type(Instanton), intent(out) :: phi, phi_prev
-    real(dl), intent(in) :: delta
-    real(dl) :: r0, meff
-
-    r0 = 3._dl*(delta*2._dl)**0.5
-    meff = (delta*2._dl)**0.5*(1._dl-0.25/delta**2)**0.5
-!    if (meff*r0 < 1.) then
-    if (.false.) then
-    ! Add interpolation and condition above
-    else
-       call breather_profile(phi%tForm%xGrid,phi%phi,r0,1./meff)  ! ugly nonlocality with transform
-    endif       
-  end subroutine initial_profile
-
-  !>@brief
-  !> Obtain instanton profiles and actions over the prescribed range of potential parameters
-  subroutine scan_profiles_(delVals,dim,ord)
-    real(dl), dimension(:), intent(in) :: delVals
-    integer, intent(in) :: dim, ord
-
-    type(Instanton) :: inst
-    real(dl) :: delta
-
-    real(dl) :: w, len, r0, meff
-    real(dl) :: phit, phif
-    real(dl), dimension(0:ord) :: xNew, phi_prev, phi
-    integer :: i,u
-    
-    open(unit=newunit(u),file='actions.dat')
-    call create_instanton(inst,ord,dim)
-
-    delta = delVals(1)
-    call compute_profile_(inst,delta,out=.false.)
-    write(u,*) delta, compute_action_(inst)
-    
-    do i=2,size(delVals)
-       delta = delVals(i)
-!       call get_minima(phif,phit)  
-       if ( abs(phi(0)-phif) < 0.9*abs(phif-phit) ) then
-          call bubble_parameters_nd(delta,dim*1._dl,r0,meff); call grid_params(w,len,r0,1._dl/meff)
-          ! Add initialisatin using previous profile
-       else
-          call compute_profile_(inst,delta,out=.false.)
-       endif
-       write(u,*) delta, compute_action_(inst)
-    enddo
-    close(u)
-  end subroutine scan_profiles_
-#endif
   
 !!!! TO FIX: nonlocality of w,r0,len,meff in this subroutine
   !!!! Extra calls to create chebyshev grids
@@ -247,7 +195,8 @@ contains
     real(dl) :: delta
     real(dl) :: w, len, r0, meff
     real(dl) :: phit, phif
-    real(dl), dimension(0:ord) :: xNew, phi_prev, phi
+    !real(dl), dimension(0:ord) :: xNew, phi_prev, phi
+    real(dl), dimension(0:ord) :: phi
     integer :: actFile
 
     call get_minima(phif,phit)  ! In general this depends on the potential parameters
@@ -259,13 +208,13 @@ contains
     
     do i=2,size(delVals)
        delta = delVals(i)
-       print*,i,"delta = ",delta, abs(phi(0)-phif)/pi
        if ( abs(phi(0)-phif) < 0.9*abs(phif-phit)) then
           call bubble_parameters_nd(delta,dim*1._dl,r0,meff); call grid_params(w,len,r0,1._dl/meff)
           print*,i," prev profile", r0, meff
-          xNew = chebyshev_grid(ord,len,w)
-          phi_prev = interpolate_instanton(xNew,phi,tForm)
-          call compute_profile(delta,ord,dim,phi,tForm,phi_prev,out=.true.)
+          ! xNew = chebyshev_grid(ord,len,w)
+          ! phi_prev = interpolate_instanton(xNew,phi,tForm)
+          ! call compute_profile(delta,ord,dim,phi,tForm,phi_prev,out=.true.)
+          call compute_profile(delta,ord,dim,phi,tForm,interpolate_instanton(chebyshev_grid(ord,len,w),phi,tForm),out=.true.)
        else
           call compute_profile(delta,ord,dim,phi,tForm,out=.true.)
        endif
