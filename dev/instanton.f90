@@ -130,9 +130,8 @@ contains
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! FIX THIS
     !   call get_minima(phif,phit)
-    phif = 0._dl; phit = pi  ! Replace this with the function call above
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    
+    phif = pi; phit = 0._dl  !! Replace this with a function call
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     call bubble_parameters_nd_(delta,dim*1._dl,r0,meff)
     call grid_params_(w,len,r0,1._dl/meff)
 
@@ -145,7 +144,8 @@ contains
        this%phi(0:order) = phi_init(0:order)
     else
 !!! Need to fix this now, since I have a different meff in the subroutine
-       call initialise_fields_(this%phi,delta,dim,.false.,this%tForm)  ! FIX THIS
+       !       call initialise_fields_(this%phi,delta,dim,.false.,this%tForm)  ! FIX THIS
+       call profile_guess(this,r0,meff,phif,phit,1)
     endif
     call solve(solv,this%phi)
 
@@ -192,51 +192,76 @@ contains
     r0 = dim*(2._dl*delta)**0.5
   end subroutine bubble_parameters_nd_
 
-!!!!!!!!!!!!!!
-  ! Clean these next few up so they aren't so ugly
-  !!!!!!!!!!!!!
-  !>@brief
-  !> Initialise our initial guess for the instanton profile
-  !>
-  !>@param[in] prev  If True - initialise profile using previous numerical profile
-  !>                 If False - initialise using an analytic formula
-  subroutine initialise_fields_(phi_i,delta,dim,prev,tForm,w,len)
-    real(dl), dimension(:), intent(out) :: phi_i
-    real(dl), intent(in) :: delta
-    integer, intent(in) :: dim
-    logical, intent(in) :: prev
-    type(Chebyshev), intent(in) :: tForm
-    real(dl), intent(in), optional :: w,len
-    real(dl) :: r0, meff
-
-    ! This is all fucked
-    if (prev) then
-    else
-       call bubble_parameters_nd_(delta,dim*1._dl,r0,meff)
-       if (meff*r0 < 100.) then
-!          phi_i = -2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*tForm%xGrid))  ! other minima
-          phi_i = 2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*tForm%xGrid)) + pi
-       else
-          phi_i = 2._dl*atan(exp((tForm%xGrid-r0)*meff))
-!          phi_i = -2._dl*atan(exp((tForm%xGrid-r0)*meff)) + pi  ! other minima
-       endif
-    endif
-  end subroutine initialise_fields_
-
   !>@brief
   !> Initialise our initial profile guess based on the given radius and width.
   !> A choice to use tanh, arctan or breather initial profiles are given
-  subroutine profile_guess(this,r0,meff,s)
+  subroutine profile_guess(this,r0,meff,phif,phit,s)
     type(Instanton), intent(inout) :: this
-    real(dl), intent(in) :: r0,meff
+    real(dl), intent(in) :: r0,meff,phif, phit
     integer, intent(in) :: s ! Select type of profile to use
 
+    select case (s)
+    case (1)
+       !call breather_profile(this%tForm%xGrid,this%phi,r0,meff,phif,phit)
+       this%phi(:) = breather_p(this%tForm%xGrid(:),r0,meff,phif,phit)
+    case (2)
+       !call tanh_profile(this%tForm%xGrid,this%phi,r0,w)
+       this%phi(:) = tanh_p(this%tForm%xGrid(:),r0,meff,phif,phit)
+    case (3)
+       !call atan_profile(this%tForm%xGrid,this%phi,r0,meff,phif,phit)
+       this%phi(:) = atan_p(this%tForm%xGrid(:),r0,meff,phif,phit)
+    case default
+       this%phi(:) = 2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*this%tForm%xGrid(:))) + pi
+    end select
     !call breather_profile(this%tForm%xGrid,this%phi,r0,w)
     ! this%phi(:) = 2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*this%xGrid(:)) + pi
-    !call tanh_profile(this%tForm%xGrid,this%phi,r0,w)
-    ! this%phi(:) = 0._dl
-    !call atan_profile(this%tForm%xGrid,this%phi,r0,w)
-    ! this%phi(:) = 2._dl*atan(exp(meff*(this%tForm%xGrid(:)-r0)))
   end subroutine profile_guess
+
+  elemental function breather_p(x,r0,m,phif,phit) result(f)
+    real(dl), intent(in) :: x
+    real(dl), intent(in) :: r0,m,phif,phit
+    real(dl) :: f
+    f = (phif-phit)*(2._dl/pi)*atan(-0.5*exp(m*r0)/cosh(m*x)) + phif
+  end function breather_p
+
+  elemental function tanh_p(x,r0,m,phif,phit) result(f)
+    real(dl), intent(in) :: x
+    real(dl), intent(in) :: r0,m,phif,phit
+    real(dl)  :: f
+    f = 0.5_dl*(phif-phit)*tanh(m*(x-r0)) + 0.5_dl*(phit+phif)
+  end function tanh_p
+
+  elemental function atan_p(x,r0,m,phif,phit) result(f)
+    real(dl), intent(in) :: x
+    real(dl), intent(in) :: r0,m,phif,phit
+    real(dl) :: f
+
+!    real(dl) :: mscl
+!    mscl = 1.5_dl*m
+    f = (phif-phit)*(2._dl/pi)*atan(exp(m*(x-r0))) + phit
+  end function atan_p
+  
+  subroutine breather_profile(x,f,r0,m,phif,phit)
+    real(dl), dimension(:), intent(in) :: x
+    real(dl), dimension(1:size(x)), intent(out) :: f
+    real(dl), intent(in) :: r0,m,phif,phit
+    f(:) =  0._dl
+  end subroutine breather_profile
+
+  subroutine tanh_profile(x,f,r0,m,phif,phit)
+    real(dl), dimension(:), intent(in) :: x
+    real(dl), dimension(:), intent(out) :: f
+    real(dl), intent(in) :: r0,m,phif,phit
+
+    f(:) = 0.5_dl*(phif-phit)*tanh(m*(x(:)-r0)) + 0.5_dl*(phit+phif)
+  end subroutine tanh_profile
+
+  subroutine atan_profile(x,f,r0,m,phif,phit)
+    real(dl), dimension(:), intent(in) :: x
+    real(dl), intent(in) :: r0,m,phif,phit
+    real(dl), dimension(1:size(x)), intent(out) :: f
+
+    f(:) = (phif-phit)*(2._dl/pi)*atan(exp(1.5*m*(x(:)-r0))) + phit
+  end subroutine atan_profile
   
 end module Instanton_Class
