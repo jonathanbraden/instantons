@@ -16,7 +16,7 @@ program Instanton_Solver
   type(Instanton) :: inst
   
   call create_instanton(inst,100,1)
-  call compute_profile_(inst,0.5*1.2_dl**2,out=.true.)
+  call compute_profile_(inst,0.5*1.05_dl**2,out=.true.)
 
   call interp_uniform(inst,2048,50._dl*2._dl**0.5)
   
@@ -46,7 +46,8 @@ contains
     close(u)
   end subroutine interp_uniform
   
-  !>@todo Write this an include the adjustment of the initial bubble profile
+  !>@todo Write this to include the adjustment of the initial bubble profile
+  !>@todo Remove need for chebyshev_grid, or put it in the pseudospec module
   subroutine scan_profiles_(deltas,dim,ord,out)
     real(dl), dimension(:), intent(in) :: deltas
     integer, intent(in) :: dim, ord
@@ -56,6 +57,10 @@ contains
     real(dl) :: dCur
     integer :: i, u
     logical :: outL
+
+    real(dl) :: r0, meff, phif, phit
+    real(dl) :: len, w
+    real(dl), dimension(0:ord) :: xNew, phi_prev
     
     outL = .false.; if (present(out)) outL = out
     open(unit=newunit(u),file='actions.dat')
@@ -67,8 +72,13 @@ contains
     
     do i=2,size(deltas)
        dCur = deltas(i)
-       if ( .false. ) then
-          ! Add code to use previous profile
+       if ( prev_test ) then
+          call bubble_parameters_nd_(dCur,dim*1._dl,r0,meff); call grid_params(w,len,r0,1._dl/meff)
+          xNew = 0._dl
+          !xNew = chebyshev_grid(inst%ord,len,w)
+          phi_prev = interpolate_instanton_(inst,xNew)
+          call compute_profile_(inst,dCur,phi_prev)
+          !call compute_profile_(inst,dCur,interpolate_instanton_(inst,chebyshev_grid(ord,len,w))) ! This avoids declaring some arrays, but requires more memory assignment
        else
           call compute_profile_(inst,dCur,out=outL)
        endif
@@ -76,5 +86,10 @@ contains
     enddo
     close(u)
   end subroutine scan_profiles_
+
+  function prev_test() result(prev)
+    logical :: prev
+    prev = .false.
+  end function prev_test
   
 end program Instanton_Solver

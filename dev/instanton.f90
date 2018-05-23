@@ -10,7 +10,7 @@ module Instanton_Class
      real(dl), dimension(:), allocatable :: phi
      integer :: ord
      integer :: dim
-     real(dl) :: r0, meff, w
+     real(dl) :: r0, meff, phif, phit
      logical :: exists = .false.
   end type Instanton
   
@@ -66,7 +66,7 @@ contains
     integer :: i, sz
     real(dl) :: phif
 
-    integer, parameter :: u = 56
+    integer, parameter :: u = 56 ! Fix this to automatically select an open unit
     
     inquire(opened=o,unit=u)
     if (.not.o) open(unit=u,file='instanton_.dat')
@@ -128,10 +128,7 @@ contains
     outLoc = .false.; if (present(out)) outLoc = out
     n = order+1
 
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! FIX THIS
-    !   call get_minima(phif,phit)
-    phif = pi; phit = 0._dl  !! Replace this with a function call
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    call get_minima(phif,phit)
     call bubble_parameters_nd_(delta,dim*1._dl,r0,meff)
     call grid_params_(w,len,r0,1._dl/meff)
 
@@ -180,15 +177,6 @@ contains
     call cluster_points(tForm,w,.true.)
     call transform_double_infinite(tForm,l)
   end subroutine create_grid_
-
-  !!!! Model dependent
-  subroutine bubble_parameters_nd_(delta,dim,r0,meff)
-    real(dl), intent(in) :: delta, dim
-    real(dl), intent(out) :: r0, meff
-
-    meff = (2._dl*delta)**0.5*(1._dl-0.25_dl/delta**2)**0.5
-    r0 = dim*(2._dl*delta)**0.5
-  end subroutine bubble_parameters_nd_
 
   !>@brief
   !> Initialise our initial profile guess based on the given radius and width.
@@ -259,5 +247,20 @@ contains
 
     f(:) = (phif-phit)*(2._dl/pi)*atan(exp(1.5*m*(x(:)-r0))) + phit
   end subroutine atan_profile
+
+!!!! Model dependent
+!!! Move this
+  subroutine bubble_parameters_nd_(delta,dim,r0,meff)
+    real(dl), intent(in) :: delta, dim
+    real(dl), intent(out) :: r0, meff
+
+    meff = (2._dl*delta)**0.5*(1._dl-0.25_dl/delta**2)**0.5
+    r0 = dim*(2._dl*delta)**0.5
+  end subroutine bubble_parameters_nd_
+
+  subroutine get_minima(phif,phit)
+    real(dl), intent(out) :: phif, phit
+    phif = pi; phit = 0._dl
+  end subroutine get_minima
   
 end module Instanton_Class
