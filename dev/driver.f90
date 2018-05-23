@@ -66,10 +66,12 @@ contains
     real(dl), intent(in) :: len, rc
     integer, intent(in) :: n
 
+    real(dl) :: dx
     real(dl), dimension(1:n) :: xNew, rad, phi_new
     integer :: i, u
 
     ! Fix for odd number of grid sites
+    dx = len / dble(n)
     xNew = (/ ( (i-1-n/2)*dx, i=1,n) /);
     rad = (/ ( abs(xNew(i)-rc), i=1,n ) /)
     
