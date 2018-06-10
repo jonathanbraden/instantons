@@ -14,11 +14,20 @@ program Instanton_Solver
   use Instanton_Class
 
   type(Instanton) :: inst
+  real(dl), dimension(:), allocatable :: dVals
+  integer :: nDel, i
   
   call create_instanton(inst,100,1)
   call compute_profile_(inst,0.5*1.05_dl**2,out=.true.)
 
-  call interp_uniform(inst,2048,50._dl*2._dl**0.5)
+!  call interp_uniform(inst,2048,50._dl*2._dl**0.5)
+
+  nDel = 55; allocate(dVals(1:nDel))
+  dVals = 0.5_dl +  10.**([ (-7.+0.2*(i-1), i=size(dVals),1,-1) ] )
+
+  call compute_profile_(inst,dVals(1),out=.true.)
+  
+  call scan_profiles_(dVals,1,200,.false.)
   
 contains
 
@@ -72,8 +81,8 @@ contains
     
     do i=2,size(deltas)
        dCur = deltas(i)
-       if ( prev_test ) then
-          call bubble_parameters_nd_(dCur,dim*1._dl,r0,meff); call grid_params(w,len,r0,1._dl/meff)
+       if ( prev_test(inst) ) then
+          call bubble_parameters_nd_(dCur,dim*1._dl,r0,meff); call grid_params_(w,len,r0,1._dl/meff)
           xNew = 0._dl
           !xNew = chebyshev_grid(inst%ord,len,w)
           phi_prev = interpolate_instanton_(inst,xNew)
@@ -87,9 +96,13 @@ contains
     close(u)
   end subroutine scan_profiles_
 
-  function prev_test() result(prev)
+  function prev_test(inst) result(prev)
+    type(Instanton), intent(in) :: inst
     logical :: prev
-    prev = .false.
+
+    real(dl) :: phif, phit
+    call get_minima(phif,phit)
+    prev = abs(inst%phi(0)-phif) < 0.9_dl*abs(phif-phit)
   end function prev_test
   
 end program Instanton_Solver

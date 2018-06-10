@@ -40,6 +40,8 @@ program Instanton_Solve
   order_=100
   allocate(phi(0:order_))
   call compute_profile(0.5*1.2_dl**2,order_,dim,phi,tForm,out=.true.)
+
+  call compute_profile(deltas(1),order_,dim,phi,tForm,out=.true.)
   
   len_un = 50._dl*2._dl**0.5  ! Fix this
   allocate(x_uniform(1:n_un), phi_int(1:n_un))
@@ -87,27 +89,6 @@ contains
     real(dl), intent(out) :: phif, phit
     phif = pi; phit = 0._dl
   end subroutine get_minima
-
-  !>@brief
-  !> Compute the thin wall profile.  This will be more easily stored in the model subroutine
-  subroutine thin_wall_profile(rvals,phi,r0,w0,phit,phif)
-    real(dl), dimension(:), intent(in) :: rvals
-    real(dl), dimension(:), intent(out) :: phi
-    real(dl), intent(in) :: r0, w0, phit, phif
-    
-    !phi = -0.5_dl*(phit-phif)*tanh((rvals-r0)/w0) + 0.5_dl*(phit+phif)
-    phi = -2._dl*atan(exp((rvals-r0)/w0)) + pi
-  end subroutine thin_wall_profile
-
-  subroutine breather_profile(rvals,phi,r0,w0)
-    real(dl), dimension(:), intent(in) :: rvals
-    real(dl), dimension(:), intent(out) :: phi
-    real(dl), intent(in) :: r0,w0
-    real(dl) :: meff
-
-    meff = 1._dl/20  ! Why is this hardcoded?
-    phi = -2._dl*atan(-0.5_dl*exp(meff*r0)/cosh(meff*rvals))
-  end subroutine breather_profile
   
   !>@brief
   !> Compute the radius and width of the thin-wall using the tension, vacuum splitting and number of dimensions
@@ -248,8 +229,6 @@ contains
     call bubble_parameters_nd(delta,dim*1._dl,r0,meff)
     call grid_params(w,len,r0,1._dl/meff)
 
-    ! The way transform is used here is ugly and nonlocal.  Fix it!!!
-!    call destroy_chebyshev(transform)
     call create_grid(tForm,order,w,len)
     call create_solver(solv,n,100,0.1_dl)
     call initialise_equations(tForm,delta,dim)
@@ -265,27 +244,6 @@ contains
 
     if (outLoc) call output_simple(tForm,phi,.false.)
   end subroutine compute_profile
-
-  !! This is super wasteful if we are going to interpolate onto the same grid many times
-  !! If we are, should store the interpolation matrix separately and just do matrix multiplies
-  subroutine interpolate_phi(phi_new, xNew, phi_old, xOld, tForm)
-    real(dl), dimension(1:), intent(out) :: phi_new
-    real(dl), dimension(1:), intent(in) :: xNew, phi_old, xOld
-    type(Chebyshev), intent(in) :: tForm
-    real(dl), dimension(:), allocatable :: phi_spec
-    real(dl), dimension(:,:), allocatable :: basis
-    integer :: i, ord
-
-    ord = size(phi_old)-1
-    allocate( phi_spec(0:ord) ); allocate(basis(0:ord,0:2))
-    phi_spec = matmul(tForm%fTrans, phi_old)
-    do i=1,size(xNew)
-       call evaluate_chebyshev(ord,xNew(i),basis,0)
-       phi_new(i) = sum(phi_spec(:)*basis(:,0))
-    enddo
-
-    deallocate(phi_spec)
-  end subroutine interpolate_phi
 
   ! This doesn't seem to be working yet
   function interpolate_instanton(r_new,f_cur,tForm) result(f_int)

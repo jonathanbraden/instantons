@@ -110,13 +110,22 @@ contains
     deallocate(dfld,lag)
   end function compute_action_
 
-  subroutine compute_profile_(this,delta,phi_init,out)
+  !>@brief
+  !> Compute the instanton solution for the symmetry breaking parameter delta
+  !>
+  !>@param[inout] this
+  !>@param[in] delta
+  !>@param[in] (optional) phi_init
+  !>@param[in] (optional) out  - Boolean to write result to file or not
+  !>@param[in] (optional) p_i  - Integer choice of initial analytic profile guess
+  subroutine compute_profile_(this,delta,phi_init,out,p_i)
     type(Instanton), intent(inout) :: this
     real(dl), intent(in) :: delta
     real(dl), intent(in), optional :: phi_init(0:this%ord)
     logical, intent(in), optional :: out
+    integer, intent(in), optional :: p_i
 
-    logical :: outLoc; integer :: order, dim, n
+    logical :: outLoc; integer :: order, dim, n, p_loc
     type(Solver) :: solv
 
     ! Clean up all this extraneous crap
@@ -126,6 +135,7 @@ contains
 
     dim = this%dim; order = this%ord
     outLoc = .false.; if (present(out)) outLoc = out
+    p_loc = 3; if (present(p_i)) p_loc = p_i
     n = order+1
 
     call get_minima(phif,phit)
@@ -140,7 +150,7 @@ contains
     if (present(phi_init)) then
        this%phi(0:order) = phi_init(0:order)
     else
-       call profile_guess(this,r0,meff,phif,phit,1)
+       call profile_guess(this,r0,meff,phif,phit,p_i)
     endif
     call solve(solv,this%phi)
 
@@ -166,7 +176,7 @@ contains
   end subroutine grid_params_
 
 !!!! This functionality should be moved into the chebyshev code
-!!! I'm pretty sure it's in there already, so just kill this an use the call in the library
+!!! I'm pretty sure it's in there already, so just kill this and use the call in the library
   subroutine create_grid_(tForm,ord,w,l)
     type(Chebyshev), intent(out) :: tForm
     integer, intent(in) :: ord
@@ -197,6 +207,7 @@ contains
        !call atan_profile(this%tForm%xGrid,this%phi,r0,meff,phif,phit)
        this%phi(:) = atan_p(this%tForm%xGrid(:),r0,meff,phif,phit)
     case default
+       ! call breather_profile(this%tForm%xGrid,this%phi,r0,meff,phif,phit)
        this%phi(:) = breather_p(this%tForm%xGrid(:),r0,meff,phif,phit)
     end select
   end subroutine profile_guess
@@ -205,7 +216,7 @@ contains
     real(dl), intent(in) :: x
     real(dl), intent(in) :: r0,m,phif,phit
     real(dl) :: f
-    f = (phif-phit)*(2._dl/pi)*atan(-0.5*exp(m*r0)/cosh(m*x)) + phif
+    f = (phif-phit)*(2._dl/pi)*atan(-0.5_dl*exp(m*r0)/cosh(m*x)) + phif
   end function breather_p
 
   elemental function tanh_p(x,r0,m,phif,phit) result(f)
@@ -229,7 +240,7 @@ contains
     real(dl), dimension(:), intent(in) :: x
     real(dl), dimension(1:size(x)), intent(out) :: f
     real(dl), intent(in) :: r0,m,phif,phit
-    f(:) =  0._dl
+    f(:) =  (phif-phit)*(2._dl/pi)*atan(-0.5_dl*exp(m*r0)/cosh(m*x)) + phif
   end subroutine breather_profile
 
   subroutine tanh_profile(x,f,r0,m,phif,phit)
