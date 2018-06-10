@@ -1,3 +1,6 @@
+# Binary program
+instanton
+
 # Ignore generated module and object files
 *.o
 *.mod
@@ -8,9 +11,11 @@
 # Figures
 *.png
 *.pdf
+*.ps
 
 # Data files
 *.dat
+*.out
 
 # Python Binaries
 *.pyc
