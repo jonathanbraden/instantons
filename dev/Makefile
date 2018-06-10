@@ -21,11 +21,11 @@ OBJS_UT = constants.o utils.o matrix-operations.o chebyshev.o
 OBJS = $(OBJS_UT) model-canonical.o solver.o instanton.o driver.o
 OBJS_OO = $(OBJS_UT) model-canonical.o solver.o instanton.o driver_instanton.o
 
-instanton: %: $(OBJS)
-	$(FC) $(FFLAGS) -o instanton $(OBJS) $(FLIBS)
-
 instanton_oo: %: $(OBJS_OO)
 	$(FC) $(FFLAGS) -o instanton $(OBJS_OO) $(FLIBS)
+
+instanton: %: $(OBJS)
+	$(FC) $(FFLAGS) -o instanton $(OBJS) $(FLIBS)
 
 %.o: %.f90
 	$(FC) $(FFLAGS) -c $< -o $@ $(FLIBS)
