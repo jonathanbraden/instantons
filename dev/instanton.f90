@@ -137,7 +137,7 @@ contains
 
     dim = this%dim; order = this%ord
     outLoc = .false.; if (present(out)) outLoc = out
-    p_loc = 0; if (present(p_i)) p_loc = p_i
+    p_loc = 3; if (present(p_i)) p_loc = p_i
     n = order+1
 
     call get_minima(phif,phit)
@@ -152,12 +152,11 @@ contains
     if (present(phi_init)) then
        this%phi(0:order) = phi_init(0:order)
     else
-       print*,p_loc
        call profile_guess(this,r0,meff,phif,phit,p_loc)
     endif
-!    call solve(solv,this%phi)
+    call solve(solv,this%phi)
 
-!    if (outLoc) call output_instanton(this)
+    if (outLoc) call output_instanton(this)
   end subroutine compute_profile_
 
   !>@brief
