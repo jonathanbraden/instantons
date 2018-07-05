@@ -99,14 +99,16 @@ contains
     
     dfld = matmul(this%tForm%derivs(:,:,1),this%phi)
     lag = 0.5_dl*dfld**2 + potential(this%phi) - potential(phif)
-    action(1) = quadrature(this%tForm,lag*this%tForm%xGrid(:)**d)
-    action(2) = quadrature(this%tForm,dfld**2)
+
+    action(1) = quadrature(this%tForm,dfld**2)
+    action(2) = quadrature(this%tForm,lag*this%tForm%xGrid(:)**d)
     action(3) = quadrature(this%tForm,0.5_dl*dfld**2*this%tForm%xGrid(:)**d)
     action(4) = quadrature(this%tForm,(potential(this%phi)-potential(phif))*this%tForm%xGrid(:)**d)
     action(5) = 0.5_dl*action(2)*r0**d
     action(6) = quadrature(this%tForm,(0.5_dl*dfld**2+potential_tw(this%phi))*this%tForm%xGrid(:)**d)
-    action(7) = quadrature(this%tForm,this%phi*vprime(this%phi)*this%tForm%xGrid(:)**d)
-
+    !action(7) = quadrature(this%tForm,this%phi*vprime(this%phi)*this%tForm%xGrid(:)**d)
+    action(7) = quadrature(this%tForm, this%tForm%xGrid(:)**(d-1)*lag )
+    
     deallocate(dfld,lag)
   end function compute_action_
 
@@ -135,7 +137,7 @@ contains
 
     dim = this%dim; order = this%ord
     outLoc = .false.; if (present(out)) outLoc = out
-    p_loc = 3; if (present(p_i)) p_loc = p_i
+    p_loc = 0; if (present(p_i)) p_loc = p_i
     n = order+1
 
     call get_minima(phif,phit)
@@ -150,11 +152,12 @@ contains
     if (present(phi_init)) then
        this%phi(0:order) = phi_init(0:order)
     else
-       call profile_guess(this,r0,meff,phif,phit,p_i)
+       print*,p_loc
+       call profile_guess(this,r0,meff,phif,phit,p_loc)
     endif
-    call solve(solv,this%phi)
+!    call solve(solv,this%phi)
 
-    if (outLoc) call output_instanton(this)
+!    if (outLoc) call output_instanton(this)
   end subroutine compute_profile_
 
   !>@brief
@@ -196,6 +199,8 @@ contains
     real(dl), intent(in) :: r0,meff,phif, phit
     integer, intent(in) :: s ! Select type of profile to use
 
+    print*,s
+    
     select case (s)
     case (1)
        !call breather_profile(this%tForm%xGrid,this%phi,r0,meff,phif,phit)
