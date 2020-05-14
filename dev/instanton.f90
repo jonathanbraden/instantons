@@ -8,14 +8,18 @@ module Instanton_Class
   type Instanton
      type(Chebyshev) :: tForm
      real(dl), dimension(:), allocatable :: phi
-     integer :: ord
-     integer :: dim
-     real(dl) :: r0, meff, phif, phit
+     integer :: ord  
+     integer :: dim  ! Generalize for this to be noninteger
+     real(dl) :: r0, meff, phif, phit  ! Do I really need these?
      logical :: exists = .false.
+     integer :: unit = -1
   end type Instanton
   
 contains
 
+  ! To do in here : Pass in the potential, its derivative and it's second derivative as functions inside the type
+  
+  ! Expand to noninteger dimensions
   subroutine create_instanton(this,ord,d)
     type(Instanton), intent(out) :: this
     integer, intent(in) :: ord,d
@@ -23,6 +27,7 @@ contains
     if (allocated(this%phi)) deallocate(this%phi) ! Remove this to only allocate if size has changed
     allocate(this%phi(0:ord))
     this%exists = .true.
+    this%unit = 56
   end subroutine create_instanton
 
   subroutine destroy_instanton(this)
@@ -40,7 +45,8 @@ contains
     real(dl) :: L,w
     real(dl) :: xvals(1:size(r_new)), spec(1:this%tForm%ord+1), bVals(1:this%tForm%ord+1,0:2)
     integer :: i; real(dl) :: winv
-    
+
+    ! This should all be moved somewhere more modular where it doesn't rely on knowledge of how grid was transformed
     w = this%tForm%scl; L = this%tForm%len
     winv = 1._dl/w
     xvals = r_new / sqrt(r_new**2+L**2)
@@ -61,18 +67,19 @@ contains
   subroutine output_instanton(this)
     type(Instanton), intent(in) :: this
     
-    real(dl), dimension(:), allocatable :: phi_spec, dphi, d2phi
+    real(dl), dimension(0:this%ord) :: phi_spec, dphi, d2phi
     logical :: o
     integer :: i, sz
     real(dl) :: phif
 
-    integer, parameter :: u = 56 ! Fix this to automatically select an open unit
-    
+    integer :: u  ! Fix this to automatically select an open unit
+
+    ! Move this to autoselect the unit
+    u = this%unit
     inquire(opened=o,unit=u)
     if (.not.o) open(unit=u,file='instanton_.dat')
 
     sz = size(this%phi); phif = this%phi(sz-1)
-    allocate(phi_spec(0:sz-1),dphi(0:sz-1),d2phi(0:sz-1))
     
     phi_spec = matmul(this%tForm%fTrans,this%phi) 
     dphi = matmul(this%tForm%derivs(:,:,1),this%phi)
@@ -80,36 +87,31 @@ contains
     do i=0,sz-1
        write(u,*) this%tForm%xGrid(i), this%tForm%weights(i), this%phi(i), potential(this%phi(i)) - potential(phif), vprime(this%phi(i)), vdprime(this%phi(i)), dphi(i), d2phi(i), phi_spec(i), this%tForm%wFunc(i)
     enddo
-    write(u,*)
-    
-    deallocate(phi_spec,dphi,d2phi)
+    write(u,*)    
   end subroutine output_instanton
 
   function compute_action_(this) result(action)
     type(Instanton), intent(in) :: this
-    real(dl), dimension(1:7) :: action
-    real(dl), allocatable, dimension(:) :: dfld, lag
+    real(dl), dimension(1:8) :: action
+    real(dl), dimension(0:this%ord) :: dfld, lag
     real(dl) :: r0, d, phif
     integer :: ord
 
     ord = size(this%phi)-1
     d = dble(this%dim); r0 = this%r0
-    allocate( dfld(0:ord), lag(0:ord) )
     phif = this%phi(ord)  ! fix this
     
     dfld = matmul(this%tForm%derivs(:,:,1),this%phi)
     lag = 0.5_dl*dfld**2 + potential(this%phi) - potential(phif)
 
-    action(1) = quadrature(this%tForm,dfld**2)
-    action(2) = quadrature(this%tForm,lag*this%tForm%xGrid(:)**d)
-    action(3) = quadrature(this%tForm,0.5_dl*dfld**2*this%tForm%xGrid(:)**d)
-    action(4) = quadrature(this%tForm,(potential(this%phi)-potential(phif))*this%tForm%xGrid(:)**d)
-    action(5) = 0.5_dl*action(2)*r0**d
+    action(1) = quadrature(this%tForm,lag*this%tForm%xGrid(:)**d)
+    action(2) = quadrature(this%tForm,0.5_dl*dfld**2*this%tForm%xGrid(:)**d)
+    action(3) = quadrature(this%tForm,(potential(this%phi)-potential(phif))*this%tForm%xGrid(:)**d)
+    action(4) = quadrature(this%tForm,dfld**2)
+    action(5) = 0.5_dl*action(4)*r0**d
     action(6) = quadrature(this%tForm,(0.5_dl*dfld**2+potential_tw(this%phi))*this%tForm%xGrid(:)**d)
-    !action(7) = quadrature(this%tForm,this%phi*vprime(this%phi)*this%tForm%xGrid(:)**d)
-    action(7) = quadrature(this%tForm, this%tForm%xGrid(:)**(d-1)*lag )
-    
-    deallocate(dfld,lag)
+    action(7) = quadrature(this%tForm,this%phi*vprime(this%phi)*this%tForm%xGrid(:)**d)
+    action(8) = quadrature(this%tForm, this%tForm%xGrid(:)**(d-1)*lag ) ! Why this index?
   end function compute_action_
 
   !>@brief
@@ -197,21 +199,15 @@ contains
     type(Instanton), intent(inout) :: this
     real(dl), intent(in) :: r0,meff,phif, phit
     integer, intent(in) :: s ! Select type of profile to use
-
-    print*,s
     
     select case (s)
     case (1)
-       !call breather_profile(this%tForm%xGrid,this%phi,r0,meff,phif,phit)
        this%phi(:) = breather_p(this%tForm%xGrid(:),r0,meff,phif,phit)
     case (2)
-       !call tanh_profile(this%tForm%xGrid,this%phi,r0,w)
        this%phi(:) = tanh_p(this%tForm%xGrid(:),r0,meff,phif,phit)
     case (3)
-       !call atan_profile(this%tForm%xGrid,this%phi,r0,meff,phif,phit)
        this%phi(:) = atan_p(this%tForm%xGrid(:),r0,meff,phif,phit)
     case default
-       ! call breather_profile(this%tForm%xGrid,this%phi,r0,meff,phif,phit)
        this%phi(:) = breather_p(this%tForm%xGrid(:),r0,meff,phif,phit)
     end select
   end subroutine profile_guess
@@ -239,6 +235,13 @@ contains
 !    mscl = 1.5_dl*m
     f = (phif-phit)*(2._dl/pi)*atan(exp(m*(x-r0))) + phit
   end function atan_p
+
+  elemental function gaussian_p(x,r0,m,phif,phit) result(f)
+    real(dl), intent(in) :: x
+    real(dl), intent(in) :: r0,m,phif,phit
+    real(dl) :: f
+    f = (phif-phit)*exp(-0.5_dl*(x/r0)**2)
+  end function gaussian_p
   
   subroutine breather_profile(x,f,r0,m,phif,phit)
     real(dl), dimension(:), intent(in) :: x
@@ -263,19 +266,28 @@ contains
     f(:) = (phif-phit)*(2._dl/pi)*atan(exp(1.5*m*(x(:)-r0))) + phit
   end subroutine atan_profile
 
-!!!! Model dependent
-!!! Move this
-  subroutine bubble_parameters_nd_(delta,dim,r0,meff)
-    real(dl), intent(in) :: delta, dim
-    real(dl), intent(out) :: r0, meff
+  !>@brief
+  !> Use Newton method to find FV minimum.
+  !> Required input is initial guess, and function for potential derivative and curvature
+  !>
+  !> TO DO : Fix this for the case where the curvature at the minimum is very small
+  subroutine solve_for_fv(phifv,tol_deriv_,tol_diff_)
+    real(dl), intent(inout) :: phifv
+    real(dl), intent(in), optional :: tol_diff_,tol_deriv_
+    
+    real(dl) :: phi_prev, tol_diff, tol_deriv
+    integer :: i
+    
+    tol_deriv = 1.e-12; if (present(tol_deriv_)) tol_deriv = tol_deriv_
+    tol_diff = tol_deriv; if (present(tol_diff_)) tol_diff = tol_diff_
+    phi_prev = phifv + 10.*tol_diff
 
-    meff = (2._dl*delta)**0.5*(1._dl-0.25_dl/delta**2)**0.5
-    r0 = dim*(2._dl*delta)**0.5
-  end subroutine bubble_parameters_nd_
-
-  subroutine get_minima(phif,phit)
-    real(dl), intent(out) :: phif, phit
-    phif = pi; phit = 0._dl
-  end subroutine get_minima
+    i = 0
+    do while ( abs(phi_prev-phifv) > tol_diff .and. vdprime(phifv) > tol_deriv )
+       phi_prev = phifv
+       phifv = phifv - vprime(phifv)/vdprime(phifv)
+       i = i+1  ! Add error checking on max number of iterations
+    enddo
+  end subroutine solve_for_fv
   
 end module Instanton_Class

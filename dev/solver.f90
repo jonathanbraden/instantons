@@ -73,7 +73,7 @@ contains
 #ifdef DEBUG_SOLVER
     call create_solver_storage(this%mat_store,n)
 #endif
-    this%u = 99  ! Change this to a call to the next open solver
+    this%u = 99  ! Change this to a call to the next open file
     open(unit=this%u,file='solver-output.dat')
   end subroutine create_solver
 
@@ -212,7 +212,7 @@ contains
     do i=1,8
        alpha = alpha/2._dl
        this%f_prev = f_cur + alpha*this%del
-       call source(this%f_prev, this%S) ! replace with a call to source
+       call source(this%f_prev, this%S) 
        err_max = maxval(abs(this%S))
        err_rms = sqrt(sum(this%S**2))
 #ifdef DEBUG_SOLVER
