@@ -136,10 +136,11 @@ contains
     real(dl) :: w, len      ! These seem extraneous
     real(dl) :: r0, meff    ! These seem extraneous
     real(dl) :: phif, phit  ! These also do
-
+    integer :: i  ! also extraneous
+    
     dim = this%dim; order = this%ord
     outLoc = .false.; if (present(out)) outLoc = out
-    p_loc = 3; if (present(p_i)) p_loc = p_i
+    p_loc = 1; if (present(p_i)) p_loc = p_i
     n = order+1
 
     call get_minima(phif,phit)
@@ -155,29 +156,19 @@ contains
        this%phi(0:order) = phi_init(0:order)
     else
        call profile_guess(this,r0,meff,phif,phit,p_loc)
+       !this%phi = 1._dl / (1._dl + this%tForm%xGrid**2/1.1)**1.1  ! This is useful for the the Fubini
+       !this%phi = 10._dl * exp(-0.5*this%tForm%xGrid**2)
     endif
+    open(unit=50,file='ic.dat')
+    do i=0,this%ord
+       write(50,*) this%tForm%xGrid(i), this%phi(i), potential(this%phi(i)), vprime(this%phi(i)), vdprime(this%phi(i))
+    enddo
+    close(unit=50)
+    
     call solve(solv,this%phi)
 
     if (outLoc) call output_instanton(this)
   end subroutine compute_profile_
-
-  !>@brief
-  !> Given specified radius and width of a bubble profile, adjust grid mapping parameters.
-  !>
-  !> The relationship between the radius and mapping length are fixed by choice of polynomials
-  !> Should probably be moved into the chebyshev class
-  subroutine grid_params_(w,len,r0,w0)
-    real(dl), intent(out) :: w, len
-    real(dl), intent(in) :: r0, w0
-    real(dl), parameter :: wscl = 5._dl
-
-    len = r0*3._dl**0.5
-    w = wscl * w0 / len
-    if (w0 > r0) then
-       len = w0*3._dl**0.5
-       w = 1._dl
-    endif
-  end subroutine grid_params_
 
 !!!! This functionality should be moved into the chebyshev code
 !!! I'm pretty sure it's in there already, so just kill this and use the call in the library
@@ -191,7 +182,7 @@ contains
     call cluster_points(tForm,w,.true.)
     call transform_double_infinite(tForm,l)
   end subroutine create_grid_
-
+  
   !>@brief
   !> Initialise our initial profile guess based on the given radius and width.
   !> A choice to use tanh, arctan or breather initial profiles are given
@@ -207,6 +198,10 @@ contains
        this%phi(:) = tanh_p(this%tForm%xGrid(:),r0,meff,phif,phit)
     case (3)
        this%phi(:) = atan_p(this%tForm%xGrid(:),r0,meff,phif,phit)
+    case (4)
+       this%phi(:) = gaussian_p(this%tForm%xGrid(:),r0,meff,phif,phit)
+    case (5)
+       this%phi(:) = witchhat_p(this%tForm%xGrid(:),r0,meff,phif,phit)
     case default
        this%phi(:) = breather_p(this%tForm%xGrid(:),r0,meff,phif,phit)
     end select
@@ -240,9 +235,16 @@ contains
     real(dl), intent(in) :: x
     real(dl), intent(in) :: r0,m,phif,phit
     real(dl) :: f
-    f = (phif-phit)*exp(-0.5_dl*(x/r0)**2)
+    f = (phit-phif)*exp(-0.5_dl*(x/r0)**2) + phif
   end function gaussian_p
-  
+
+  elemental function witchhat_p(x,r0,m,phif,phit) result(f)
+    real(dl), intent(in) :: x
+    real(dl), intent(in) :: r0,m,phif,phit
+    real(dl) :: f
+    f = (phit-phif)/(1.+m*x**2/r0)**r0 + phif
+  end function witchhat_p
+    
   subroutine breather_profile(x,f,r0,m,phif,phit)
     real(dl), dimension(:), intent(in) :: x
     real(dl), dimension(1:size(x)), intent(out) :: f

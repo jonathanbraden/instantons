@@ -10,54 +10,42 @@
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 ! Preprocessors for inlining.  Could also move this to another file
-!#define POTENTIAL(f) ( 0.25_dl*(f**2-1._dl)**2 + del*(f**3/3._dl-f) )
-!#define VPRIME(f) ( (f+del)*(f**2-1._dl) )
-!#define VDPRIME(f) ( 3._dl*f**2 - 1._dl + 2._dl*del*f )
-
-#define POTENTIAL(f) ( 2._dl*beta*f**2*( (2.*beta+1._dl-d_space)/(2._dl*beta+1._dl)*abs(f)**(1._dl/beta) - abs(f)**(2._dl/beta) ) )
-#define VPRIME(f) ( 2._dl*f*( (2._dl*beta+1._dl-d_space)*abs(f)**(1._dl/beta) - 2._dl*(beta+1._dl)*abs(f)**(2._dl/beta) ) )
-#define VDPRIME(f) ( 2._dl*(beta+1._dl)/(beta)*( (2._dl*beta+1._dl-d_space)*abs(f)**(1._dl/beta) - 2._dl*(beta+2._dl)*abs(f)**(2._dl/beta) ) )
+#define POTENTIAL(f) ( 0.5_dl*f**2*(1._dl-log(f**2+del**2)) )
+#define VPRIME(f) ( -f*(log(f**2+del**2)-del**2) )
+#define VDPRIME(f) ( -log(f**2+del**2) - 2._dl*f**2/(f**2+del**2) + del**2 )
 
 module Model
   use constants
   use Cheby
   implicit none
-  private :: L0, ndim, beta, d_space
+  private :: L0, ndim, del
   
   real(dl), dimension(:,:), allocatable :: L0
-  real(dl) :: beta, d_space
+  real(dl) :: del
   integer :: ndim
 
 contains
-  !>@brief
-  !> Given specified radius and width of a bubble profile, adjust grid mapping parameters.
-  !>
-  !> The relationship between the radius and mapping length are fixed by choice of polynomials
-  !> Should probably be moved into the chebyshev class
+
   subroutine grid_params_(w,len,r0,w0)
     real(dl), intent(out) :: w, len
     real(dl), intent(in) :: r0, w0
-    
+
     len = 2._dl; w = 1._dl
   end subroutine grid_params_
 
- 
-  ! These need to be adjusted for very model.  Might be worth moving it
-  ! Change delta to parameters for the model
   subroutine bubble_parameters_nd_(delta,dim,r0,meff)
     real(dl), intent(in) :: delta, dim
     real(dl), intent(out) :: r0, meff
 
-    meff = 1._dl     ! could change this to beta
+    meff = 1._dl
     r0 = 1._dl/meff
   end subroutine bubble_parameters_nd_
 
-  ! This shouldn't be in here, it needs to go in the model specification
   subroutine get_minima(phif,phit)
     real(dl), intent(out) :: phif, phit
-    phif = 0._dl; phit = 1._dl
+    phif = 0._dl; phit = 10._dl
   end subroutine get_minima
-  
+
   subroutine initialise_equations(tForm, delta, dim)
     type(Chebyshev), intent(in) :: tForm
     real(dl), intent(in) :: delta
@@ -69,8 +57,7 @@ contains
     do i=0,sz-1
        L0(i+1,:) = tForm%derivs(i,:,2) + dble(dim)*tForm%derivs(i,:,1)/tForm%xGrid(i)
     enddo
-    beta = delta
-    d_space = dble(dim)
+    del = delta
   end subroutine initialise_equations
 
   subroutine initialise_equations_scaled(tForm, delta, dim, scl)
@@ -110,12 +97,13 @@ contains
     vdprime =  VDPRIME(phi)
   end function vdprime
 
+  !!!!!!!!!!!!!!!!!!! This isn't well-defined for the Logarithmic potential
   !>@brief
   !> The unperturbed part of the potential used in computing the thin-wall domain wall
   elemental function potential_tw(phi)
     real(dl) :: potential_tw
     real(dl), intent(in) :: phi
-    potential_tw = 0._dl  !del*sin(phi)**2  This is clearly wrong, fix it
+    potential_tw = del*sin(phi)**2
   end function potential_tw
   
   subroutine source(fld,src)
@@ -125,14 +113,14 @@ contains
 
     sz = size(fld)
     src(:) = -matmul(L0,fld)
-    src(:) = src(:) + VPRIME(fld(:)) !+ (fld(:)+del)*(fld(:)**2-1._dl)
+    src(:) = src(:) + VPRIME(fld(:))
     src(sz) = 0._dl  ! Set boundary condition at infinity
   end subroutine source
 
   !>@brief
   !> The second variation of our nonlinear equation
   !
-  !> Notes on storage.  The first index is ? and the second index is?
+  !> Notes on storage.  The first index is ? and the second index is ?
   !> The boundary conditions are designed to pick out phi(r_max),
   !> which is then set to 0 with the source term
   subroutine variation(fld,var)
@@ -143,13 +131,13 @@ contains
     sz = size(fld)
     var(1:sz,1:sz) = L0(1:sz,1:sz)
     do i=1,sz
-       var(i,i) = var(i,i) - ( VDPRIME(fld(i)) ) !- (3._dl*fld(i)**2-1._dl +2._dl*del*fld(i))
+       var(i,i) = var(i,i) - ( VDPRIME(fld(i)) ) 
     enddo
     ! boundary condition at infinity
     var(sz,:) = 0._dl
     var(sz,sz) = 1._dl
   end subroutine variation
-  
+
   subroutine source_scaled(fld,src,scl,rvals)
     real(dl), dimension(1:), intent(in) :: fld
     real(dl), dimension(1:), intent(out) :: src
