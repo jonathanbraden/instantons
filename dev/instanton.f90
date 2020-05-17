@@ -160,7 +160,7 @@ contains
        
     call create_grid_(this%tForm,order,w,len) ! Replace this with the library call
     call create_solver(solv,n,100,0.1_dl)
-    call initialise_equations(this%tForm,params,dim,(/.false.,.true./))
+    call initialise_equations(this%tForm,params,dim,(/.false.,.false./))
 
     if (present(phi_init)) then
        this%phi(0:order) = phi_init(0:order)

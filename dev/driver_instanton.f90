@@ -26,14 +26,8 @@ program Instanton_Solver
   integer :: nDel, i
 
   ! Temporary crap for testing eigenvalues
-  integer :: npt, ierror
-  real(dl) :: norm
-  real(dl), dimension(:,:), allocatable :: op
   real(dl), dimension(:), allocatable :: ev_r, ev_i
   real(dl), dimension(:,:), allocatable :: v_r
-  real(dl), dimension(:), allocatable :: work
-  integer :: iwork
-  real(dl), dimension(1) :: dummy_
   integer :: u, j
   complex(dl), parameter :: iImag = (0._dl,1._dl)
   
@@ -46,45 +40,34 @@ program Instanton_Solver
   dVals = 10.**([ (-7.+0.2*(i-1), i=1,size(dVals)) ] )
   
 !  call compute_profile_(inst,0.5*1.34_dl**2,out=.true.)
-  call compute_profile_(inst,(/1.e-7/),out=.true.,p_i=2)    ! Cubic double well
+  call compute_profile_(inst,(/0.001/),out=.true.,p_i=2)    ! Cubic double well
 !  call compute_profile_(inst,(/ 1.+1.e1 /),out=.true.,p_i=5)    ! Fubini Potential
 !  call compute_profile_(inst,1.e-8,out=.true.,p_i=4)  ! Logarithmic potential
   print*, compute_action_(inst)
 
-  ! Quick testing of eigenvalues.  Will be fixed
-  npt = inst%ord+1
-  allocate(op(1:npt,1:npt))
-  allocate(ev_r(1:npt)); allocate(ev_i(1:npt)); allocate(v_r(1:npt,1:npt))
-  call DGEEV('N','V',npt,op,npt,ev_r,ev_i,dummy_,npt,v_r,npt,dummy_,-1,ierror)
-  iwork = int(dummy_(1)); allocate(work(1:iwork))
-
-  call variation(inst%phi,op); op = -op  ! Note sign reversal
-  ! Figure out correct sign on angular momentum barrier
-  do i=1,npt
-     op(i,i) = op(i,i) + (inst%dim+1._dl-1._dl)/inst%tForm%xGrid(i-1)**2
+  allocate(ev_r(0:inst%ord),ev_i(0:inst%ord))
+  allocate(v_r(0:inst%ord,0:inst%ord))
+  call get_eigenvalues(inst,ev_r,ev_i,0)
+  print*,minval(ev_r)
+  call get_eigenvectors(inst,ev_r,ev_i,v_r,0)
+  print*,minval(ev_r)
+  open(unit=newunit(u),file='eval.dat')
+  do i=0,inst%ord
+     write(u,*) ev_r(i), ev_i(i)
   enddo
-  call DGEEV('N','V',npt,op,npt,ev_r,ev_i,dummy_,npt,v_r,npt,work,iwork,ierror)
-
+  close(u)
   open(unit=newunit(u),file='evec.dat')
-  do j=1,npt
-     do i=1,npt
-        write(u,*) inst%tForm%xGrid(i-1),v_r(i,j)
+  do i=0,inst%ord
+     do j=0,inst%ord
+        write(u,*) inst%tForm%xGrid(j), v_r(j,i)
      enddo
      write(u,*)
   enddo
   close(u)
-  open(unit=newunit(u),file='eval.dat')
-  do i=1,npt
-     write(u,*) ev_r(i), ev_i(i)
-  enddo
-  close(u)
-  
-  call get_eigenvalues_neumann(inst,ev_r,ev_i,1,inst%dim)
-    open(unit=newunit(u),file='eval_.dat')
-  do i=1,npt
-     write(u,*) ev_r(i), ev_i(i)
-  enddo
-  close(u)
+  call get_eigenvalues(inst,ev_r,ev_i,1)
+  print*,minval(ev_r)
+  call get_eigenvalues(inst,ev_r,ev_i,2)
+  print*,minval(ev_r)
   
   ! This seems broken at the moment.  Figure out why.  3D vomits and dies horribly
 !  call scan_profiles_(dVals,1,10ls0,.false.)

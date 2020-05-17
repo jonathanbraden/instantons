@@ -22,6 +22,11 @@ module Equations
   
 contains
 
+  subroutine set_bc(bc_)
+    logical, dimension(1:2), intent(in) :: bc_
+    bc = bc_
+  end subroutine set_bc
+  
   subroutine initialise_equations(tForm, params, dim, bc_)
     type(Chebyshev), intent(in) :: tForm
     real(dl), dimension(:), intent(in) :: params
