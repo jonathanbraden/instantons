@@ -9,6 +9,9 @@
 !> vacuum decay in both the zero-temperature and
 !> high temperature limit
 !
+!> Important TO DO: Write output to some sort of binary format
+!> Fits looks easy enough ...
+!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 program Instanton_Solver
   use constants, only : dl, pi, twopi
@@ -33,14 +36,18 @@ program Instanton_Solver
   integer :: u, j
   complex(dl), parameter :: iImag = (0._dl,1._dl)
   
-  call create_instanton(inst,200,1)
+  call create_instanton(inst,120,3)
 !  call compute_profile_(inst,0.5*10._dl**2,out=.true.)  
 !  call interp_uniform(inst,2048,50._dl*2._dl**0.5)
 
   nDel = 65; allocate(dVals(1:nDel))
-  dVals = 0.5_dl +  10.**([ (-7.+0.2*(i-1), i=size(dVals),1,-1) ] )
-
-  call compute_profile_(inst,0.5*1.34_dl**2,out=.true.)
+!  dVals = 0.5_dl +  10.**([ (-7.+0.2*(i-1), i=size(dVals),1,-1) ] )
+  dVals = 10.**([ (-7.+0.2*(i-1), i=1,size(dVals)) ] )
+  
+!  call compute_profile_(inst,0.5*1.34_dl**2,out=.true.)
+!  call compute_profile_(inst,(/1.e-7/),out=.true.,p_i=2)    ! Cubic double well
+!  call compute_profile_(inst,(/ 1.+1.e1 /),out=.true.,p_i=5)    ! Fubini Potential
+!  call compute_profile_(inst,1.e-8,out=.true.,p_i=4)  ! Logarithmic potential
   print*, compute_action_(inst)
 
   ! Quick testing of eigenvalues.  Will be fixed
@@ -120,7 +127,7 @@ contains
     call create_instanton(inst,ord,dim)
 
     dCur = deltas(1)
-    call compute_profile_(inst,dCur,out=outL)
+    call compute_profile_(inst,(/dCur/),out=outL)
     write(u,*) dCur, compute_action_(inst)
     
     do i=2,size(deltas)
@@ -129,10 +136,10 @@ contains
           call bubble_parameters_nd_(dCur,dim*1._dl,r0,meff); call grid_params_(w,len,r0,1._dl/meff)
           xNew = chebyshev_grid(inst%ord,len,w)
           phi_prev = interpolate_instanton_(inst,xNew)
-          call compute_profile_(inst,dCur,phi_prev)
+          call compute_profile_(inst,(/dCur/),phi_prev)
           !call compute_profile_(inst,dCur,interpolate_instanton_(inst,chebyshev_grid(ord,len,w))) ! This avoids declaring some arrays, but requires more memory assignment
        else
-          call compute_profile_(inst,dCur,out=outL)
+          call compute_profile_(inst,(/dCur/),out=outL)
        endif
        write(u,*) dCur, compute_action_(inst)
     enddo

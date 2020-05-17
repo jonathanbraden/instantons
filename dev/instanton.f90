@@ -79,7 +79,7 @@ contains
     ! Move this to autoselect the unit (can I just set u = -1 initially and this will work?)
     u = this%unit
     inquire(opened=o,unit=u)
-    if (.not.o) open(unit=u,file='instanton_.dat')
+    if (.not.o) open(unit=u,file='instanton.dat')
 
     sz = size(this%phi); phif = this%phi(sz-1)
     
@@ -160,13 +160,18 @@ contains
        
     call create_grid_(this%tForm,order,w,len) ! Replace this with the library call
     call create_solver(solv,n,100,0.1_dl)
-    call initialise_equations(this%tForm,params,dim,(/.false.,.false./))
-    
+    call initialise_equations(this%tForm,params,dim,(/.false.,.true./))
+
     if (present(phi_init)) then
        this%phi(0:order) = phi_init(0:order)
     else
        call profile_guess(this,r0,meff,phif,phit,p_loc) ! Even better, pass a function with parameters in
     endif
+
+    open(unit=newunit(u),file='ic.dat')
+    do i=0,order
+       write(u,*) this%tForm%xGrid(i), this%phi(i)
+    enddo
     
     call solve(solv,this%phi)
 
