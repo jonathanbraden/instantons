@@ -122,12 +122,14 @@ contains
   !>@param[inout] this
   !>@param[in] delta
   !>@param[in] (optional) phi_init
+  !>@param[in] (optional) (len,w) parameters for the grid.  Otherwise uses a function call
   !>@param[in] (optional) out  - Boolean to write result to file or not
   !>@param[in] (optional) p_i  - Integer choice of initial analytic profile guess
-  subroutine compute_profile_(this,params,phi_init,out,p_i)
+  subroutine compute_profile_(this,params,phi_init,grid,out,p_i)
     type(Instanton), intent(inout) :: this
     real(dl), dimension(:), intent(in) :: params
     real(dl), intent(in), optional :: phi_init(0:this%ord)
+    real(dl), dimension(1:2), intent(in), optional :: grid
     logical, intent(in), optional :: out
     integer, intent(in), optional :: p_i
 
@@ -147,26 +149,24 @@ contains
     n = order+1
 
     ! The first two calls here are just getting params for the initial guess
+    call set_model_params(params,dim)
     call get_minima(phif,phit)  ! Change this to pass in params
     call bubble_parameters_nd_(params(1),dim*1._dl,r0,meff)  ! Change this to pass in params
-    call grid_params_(w,len,r0,1._dl/meff)
-
+    if (present(grid)) then
+       len = grid(1); w = grid(2)
+    else
+       call grid_params_(w,len,r0,1._dl/meff)
+    endif
+       
     call create_grid_(this%tForm,order,w,len) ! Replace this with the library call
     call create_solver(solv,n,100,0.1_dl)
-    call initialise_equations(this%tForm,params,dim)
+    call initialise_equations(this%tForm,params,dim,(/.false.,.false./))
     
     if (present(phi_init)) then
        this%phi(0:order) = phi_init(0:order)
     else
-       call profile_guess(this,r0,meff,phif,phit,p_loc)
-       !this%phi = 1._dl / (1._dl + this%tForm%xGrid**2/params(1))**(0.9*params(1))  ! This is useful for the the Fubini
+       call profile_guess(this,r0,meff,phif,phit,p_loc) ! Even better, pass a function with parameters in
     endif
-    
-    open(unit=newunit(u),file='ic.dat')
-    do i=0,this%ord
-       write(u,*) this%tForm%xGrid(i), this%phi(i), potential(this%phi(i)), vprime(this%phi(i)), vdprime(this%phi(i))
-    enddo
-    close(unit=u)
     
     call solve(solv,this%phi)
 

@@ -9,11 +9,6 @@
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-!!!!! Don't repeat this.  Use either a header or just call the function
-!#define POTENTIAL(f) ( 2._dl*beta*f**2*( (2.*beta+1._dl-d_space)/(2._dl*beta+1._dl)*abs(f)**(1._dl/beta) - abs(f)**(2._dl/beta) ) )
-!#define VPRIME(f) ( 2._dl*f*( (2._dl*beta+1._dl-d_space)*abs(f)**(1._dl/beta) - 2._dl*(beta+1._dl)*abs(f)**(2._dl/beta) ) )
-!#define VDPRIME(f) ( 2._dl*(beta+1._dl)/(beta)*( (2._dl*beta+1._dl-d_space)*abs(f)**(1._dl/beta) - 2._dl*(beta+2._dl)*abs(f)**(2._dl/beta) ) )
-
 module Equations
   use constants, only : dl
   use Cheby
@@ -35,7 +30,7 @@ contains
     integer :: i, sz
 
     ! This line is awful, set it somewhere else
-    call set_model_params(params,dim)
+    ! call set_model_params(params,dim)  Moved into compute_profile_
     
     sz = size(tForm%xGrid)
     if (allocated(L0)) deallocate(L0); allocate( L0(1:sz,1:sz) )
@@ -56,8 +51,8 @@ contains
 
     sz = size(fld)
     src(:) = -matmul(L0,fld) + vprime(fld(:))
-    if ( bc(2) ) src(sz) = 1._dl
-    if ( bc(1) ) src(1) = 1._dl
+    if ( bc(2) ) src(sz) = 0._dl
+    if ( bc(1) ) src(1) = 0._dl
   end subroutine source
 
   subroutine variation(fld,var)
