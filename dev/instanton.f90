@@ -1,5 +1,6 @@
 module Instanton_Class
   use constants, only : dl
+  use Utils, only : newunit
   use Cheby
   use Model  ! Try to remove this dependence
   use Nonlinear_Solver
@@ -10,7 +11,8 @@ module Instanton_Class
      real(dl), dimension(:), allocatable :: phi
      integer :: ord  
      integer :: dim  ! Generalize for this to be noninteger
-     real(dl) :: r0, meff, phif, phit  ! Do I really need these?
+     real(dl) :: l, w  ! Specifies grid
+     real(dl) :: r0, meff, phif, phit  ! Specifies initial bubble
      logical :: exists = .false.
      integer :: unit = -1
   end type Instanton
@@ -27,7 +29,7 @@ contains
     if (allocated(this%phi)) deallocate(this%phi) ! Remove this to only allocate if size has changed
     allocate(this%phi(0:ord))
     this%exists = .true.
-    this%unit = 56
+    this%unit = 56    !! Fix this to be automated
   end subroutine create_instanton
 
   subroutine destroy_instanton(this)
@@ -74,7 +76,7 @@ contains
 
     integer :: u  ! Fix this to automatically select an open unit
 
-    ! Move this to autoselect the unit
+    ! Move this to autoselect the unit (can I just set u = -1 initially and this will work?)
     u = this%unit
     inquire(opened=o,unit=u)
     if (.not.o) open(unit=u,file='instanton_.dat')
@@ -98,7 +100,7 @@ contains
     integer :: ord
 
     ord = size(this%phi)-1
-    d = dble(this%dim); r0 = this%r0
+    d = dble(this%dim); r0 = this%r0  ! Fix r0 not being set
     phif = this%phi(ord)  ! fix this
     
     dfld = matmul(this%tForm%derivs(:,:,1),this%phi)
@@ -122,9 +124,9 @@ contains
   !>@param[in] (optional) phi_init
   !>@param[in] (optional) out  - Boolean to write result to file or not
   !>@param[in] (optional) p_i  - Integer choice of initial analytic profile guess
-  subroutine compute_profile_(this,delta,phi_init,out,p_i)
+  subroutine compute_profile_(this,params,phi_init,out,p_i)
     type(Instanton), intent(inout) :: this
-    real(dl), intent(in) :: delta
+    real(dl), dimension(:), intent(in) :: params
     real(dl), intent(in), optional :: phi_init(0:this%ord)
     logical, intent(in), optional :: out
     integer, intent(in), optional :: p_i
@@ -136,34 +138,35 @@ contains
     real(dl) :: w, len      ! These seem extraneous
     real(dl) :: r0, meff    ! These seem extraneous
     real(dl) :: phif, phit  ! These also do
-    integer :: i  ! also extraneous
+    integer :: i 
+    integer :: u
     
     dim = this%dim; order = this%ord
     outLoc = .false.; if (present(out)) outLoc = out
     p_loc = 1; if (present(p_i)) p_loc = p_i
     n = order+1
 
-    call get_minima(phif,phit)
-    call bubble_parameters_nd_(delta,dim*1._dl,r0,meff)
+    ! The first two calls here are just getting params for the initial guess
+    call get_minima(phif,phit)  ! Change this to pass in params
+    call bubble_parameters_nd_(params(1),dim*1._dl,r0,meff)  ! Change this to pass in params
     call grid_params_(w,len,r0,1._dl/meff)
 
     call create_grid_(this%tForm,order,w,len) ! Replace this with the library call
     call create_solver(solv,n,100,0.1_dl)
-    call initialise_equations(this%tForm,delta,dim)
+    call initialise_equations(this%tForm,params,dim)
     
-    ! Modularise this part
     if (present(phi_init)) then
        this%phi(0:order) = phi_init(0:order)
     else
        call profile_guess(this,r0,meff,phif,phit,p_loc)
-       !this%phi = 1._dl / (1._dl + this%tForm%xGrid**2/1.1)**1.1  ! This is useful for the the Fubini
-       !this%phi = 10._dl * exp(-0.5*this%tForm%xGrid**2)
+       !this%phi = 1._dl / (1._dl + this%tForm%xGrid**2/params(1))**(0.9*params(1))  ! This is useful for the the Fubini
     endif
-    open(unit=50,file='ic.dat')
+    
+    open(unit=newunit(u),file='ic.dat')
     do i=0,this%ord
-       write(50,*) this%tForm%xGrid(i), this%phi(i), potential(this%phi(i)), vprime(this%phi(i)), vdprime(this%phi(i))
+       write(u,*) this%tForm%xGrid(i), this%phi(i), potential(this%phi(i)), vprime(this%phi(i)), vdprime(this%phi(i))
     enddo
-    close(unit=50)
+    close(unit=u)
     
     call solve(solv,this%phi)
 
@@ -185,7 +188,7 @@ contains
   
   !>@brief
   !> Initialise our initial profile guess based on the given radius and width.
-  !> A choice to use tanh, arctan or breather initial profiles are given
+  !> A choice to use tanh, arctan, breather, Gaussian or generalised witchhat initial profiles are given
   subroutine profile_guess(this,r0,meff,phif,phit,s)
     type(Instanton), intent(inout) :: this
     real(dl), intent(in) :: r0,meff,phif, phit
@@ -235,7 +238,7 @@ contains
     real(dl), intent(in) :: x
     real(dl), intent(in) :: r0,m,phif,phit
     real(dl) :: f
-    f = (phit-phif)*exp(-0.5_dl*(x/r0)**2) + phif
+    f = (phit-phif)*exp(-(m*x)**2) + phif
   end function gaussian_p
 
   elemental function witchhat_p(x,r0,m,phif,phit) result(f)

@@ -41,15 +41,14 @@ contains
     len = 2._dl; w = 1._dl
   end subroutine grid_params_
 
- 
-  ! These need to be adjusted for very model.  Might be worth moving it
+  ! These need to be adjusted for every model.  Might be worth moving it
   ! Change delta to parameters for the model
   subroutine bubble_parameters_nd_(delta,dim,r0,meff)
     real(dl), intent(in) :: delta, dim
     real(dl), intent(out) :: r0, meff
 
     meff = 1._dl     ! could change this to beta
-    r0 = 1._dl/meff
+    r0 = 1./meff
   end subroutine bubble_parameters_nd_
 
   ! This shouldn't be in here, it needs to go in the model specification

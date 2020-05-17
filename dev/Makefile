@@ -19,10 +19,14 @@ FLIBS= -lm -llapack -lblas
 OBJS_UT = constants.o utils.o matrix-operations.o chebyshev.o
 
 OBJS = $(OBJS_UT) model-canonical.o solver.o instanton.o driver.o
-OBJS_OO = $(OBJS_UT) model-canonical.o solver.o instanton.o driver_instanton.o
+OBJS_OO = $(OBJS_UT) model-canonical.o equations.o solver.o instanton.o driver_instanton.o
+OBJS_MULTI = $(OBJS_UT) model-multifield.o solver.o instanton-multi.o driver_multi.o
 
 instanton_oo: %: $(OBJS_OO)
 	$(FC) $(FFLAGS) -o instanton $(OBJS_OO) $(FLIBS)
+
+instanton_multi: %: $(OBJS_MULTI)
+	$(FC) $(FFLAGS) -o instanton $(OBJS_MULTI) $(FLIBS)
 
 instanton: %: $(OBJS)
 	$(FC) $(FFLAGS) -o instanton $(OBJS) $(FLIBS)
