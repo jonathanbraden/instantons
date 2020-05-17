@@ -18,10 +18,11 @@ module Model
   use constants
   use Cheby
   implicit none
-!  private :: L0, ndim, beta, d_space, neumann
+  private ::  ndim, beta, d_space
   
   real(dl) :: beta, d_space
   integer :: ndim
+  logical :: init = .false.
 
 contains
 
@@ -29,6 +30,8 @@ contains
     real(dl), dimension(:), intent(in) :: params
     integer, intent(in) :: dim
     beta = params(1); d_space=dble(dim)
+    ndim = dim
+    init = .true.
   end subroutine set_model_params
 
   subroutine get_minima(phif,phit)
