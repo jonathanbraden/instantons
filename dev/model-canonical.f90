@@ -10,50 +10,54 @@
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 ! Preprocessors for inlining.  Could also move this to another file
-#define POTENTIAL(f) ( 2._dl*beta*f**2*( (2.*beta+1._dl-d_space)/(2._dl*beta+1._dl)*abs(f)**(1._dl/beta) - abs(f)**(2._dl/beta) ) )
-#define VPRIME(f) ( 2._dl*f*( (2._dl*beta+1._dl-d_space)*abs(f)**(1._dl/beta) - 2._dl*(beta+1._dl)*abs(f)**(2._dl/beta) ) )
-#define VDPRIME(f) ( 2._dl*(beta+1._dl)/(beta)*( (2._dl*beta+1._dl-d_space)*abs(f)**(1._dl/beta) - 2._dl*(beta+2._dl)*abs(f)**(2._dl/beta) ) )
+#define POTENTIAL(f) ( 0.25_dl*(f**2-1._dl)**2 + del*(f**3/3._dl-f) )
+#define VPRIME(f) ( (f+del)*(f**2-1._dl) )
+#define VDPRIME(f) ( 3._dl*f**2 - 1._dl + 2._dl*del*f )
+
+!#define POTENTIAL(f) ( 0.125_dl*(f**2-1._dl)**2 + 0.5_dl*del*(f-1._dl) )
+!#define VPRIME(f) ( 0.5_dl*f*(f**2-1._dl) + 0.5_dl*del )
+!#define VDPRIME(f) ( 1.5_dl*f**2-0.5_dl )
 
 module Model
   use constants
   use Cheby
   implicit none
-  private ::  ndim, beta, d_space
+  private :: ndim, del
   
-  real(dl) :: beta, d_space
+  real(dl) :: del
   integer :: ndim
-  logical :: init = .false.
 
 contains
 
   subroutine set_model_params(params,dim)
-    real(dl), dimension(:), intent(in) :: params
+    real(dl), dimension(1), intent(in) :: params
     integer, intent(in) :: dim
-    beta = params(1); d_space=dble(dim)
-    ndim = dim
-    init = .true.
+    del = params(1); ndim = dim
   end subroutine set_model_params
-
+  
   subroutine get_minima(phif,phit)
     real(dl), intent(out) :: phif, phit
-    phif = 0._dl; phit = 1._dl
+    phif = -1._dl; phit = 1._dl
   end subroutine get_minima
-
-  real(dl) elemental function potential(phi)
+  
+  elemental function potential(phi)
+    real(dl) :: potential
     real(dl), intent(in) :: phi
     potential = POTENTIAL(phi)
   end function potential
 
-  real(dl) elemental function vprime(phi)
+  elemental function vprime(phi)
+    real(dl) :: vprime
     real(dl), intent(in) :: phi
     vprime =  VPRIME(phi)
   end function vprime
 
-  real(dl) elemental function vdprime(phi)
+  elemental function vdprime(phi)
+    real(dl) :: vdprime
     real(dl), intent(in) :: phi
     vdprime =  VDPRIME(phi)
   end function vdprime
-  
+
   !>@brief
   !> Given specified radius and width of a bubble profile, adjust grid mapping parameters.
   !>
@@ -62,18 +66,24 @@ contains
   subroutine grid_params_(w,len,r0,w0)
     real(dl), intent(out) :: w, len
     real(dl), intent(in) :: r0, w0
+    real(dl), parameter :: wscl = 8.96_dl   ! decent for cubic, need to tweak delta -> 1 part
     
-    len = 1._dl; w = 2._dl
+    len = r0*3._dl**0.5
+    w = wscl * w0 / r0
+    if (w0 > r0) then
+       len = w0*3._dl**0.5
+       w = 1._dl
+    endif
   end subroutine grid_params_
-
-  ! These need to be adjusted for every model.  Might be worth moving it
+  
+  ! These need to be adjusted for very model.  Might be worth moving it
   ! Change delta to parameters for the model
   subroutine bubble_parameters_nd_(delta,dim,r0,meff)
     real(dl), intent(in) :: delta, dim
     real(dl), intent(out) :: r0, meff
 
-    meff = 1._dl 
-    r0 = delta  ! this is beta
+    meff = sqrt(2._dl)
+    r0 = dim / (sqrt(2._dl)*delta)
   end subroutine bubble_parameters_nd_
 
   !>@brief
@@ -81,7 +91,7 @@ contains
   elemental function potential_tw(phi)
     real(dl) :: potential_tw
     real(dl), intent(in) :: phi
-    potential_tw = 0._dl  !del*sin(phi)**2  This is clearly wrong, fix it
+    potential_tw = 0.25_dl*(phi**2-1._dl)**2
   end function potential_tw
 
   !>@brief
