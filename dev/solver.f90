@@ -121,8 +121,8 @@ contains
     logical :: test
     real(dl), parameter :: eps = 1.e-10
     
-!    test = (maxval(abs(this%S(:))) < eps) .and. (maxval(abs(this%del(:))) < eps)
-    test = (maxval(abs(this%S(:))) < eps)
+    test = (maxval(abs(this%S(:))) < eps) .and. (maxval(abs(this%del(:))) < eps)
+!    test = (maxval(abs(this%S(:))) < eps)
   end function stop_solver
 
   !>@brief

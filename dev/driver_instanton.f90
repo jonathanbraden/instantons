@@ -3,7 +3,7 @@
 !! INSTANTON SOLVER
 !
 !>@author
-!> Jonathan Braden, University College London
+!> Jonathan Braden, Canadian Institute for Theoretical Astrophysics
 !
 !> Driver program to solve instanton profiles for
 !> vacuum decay in both the zero-temperature and
@@ -25,13 +25,13 @@ program Instanton_Solver
   real(dl), dimension(:), allocatable :: dVals
   integer :: nDel, i
 
-  ! Temporary crap for testing eigenvalues
+  ! Eigenvalue and eigenvector storage.  Move this to fluctuations.f90
   real(dl), dimension(:), allocatable :: ev_r, ev_i
   real(dl), dimension(:,:), allocatable :: v_r
   integer :: u, j
   complex(dl), parameter :: iImag = (0._dl,1._dl)
   
-  call create_instanton(inst,120,3)
+  call create_instanton(inst,25,2)
 !  call compute_profile_(inst,0.5*10._dl**2,out=.true.)  
 !  call interp_uniform(inst,2048,50._dl*2._dl**0.5)
 
@@ -39,18 +39,16 @@ program Instanton_Solver
 !  dVals = 0.5_dl +  10.**([ (-7.+0.2*(i-1), i=size(dVals),1,-1) ] )
   dVals = 10.**([ (-7.+0.2*(i-1), i=1,size(dVals)) ] )
   
-!  call compute_profile_(inst,0.5*1.34_dl**2,out=.true.)
-  call compute_profile_(inst,(/0.001/),out=.true.,p_i=2)    ! Cubic double well
+  call compute_profile_(inst,(/ 0.5*100._dl**2 /),out=.true.,p_i=3)
+!  call compute_profile_(inst,(/0.001/),out=.true.,p_i=2)    ! Cubic double well
 !  call compute_profile_(inst,(/ 1.+1.e1 /),out=.true.,p_i=5)    ! Fubini Potential
-!  call compute_profile_(inst,1.e-8,out=.true.,p_i=4)  ! Logarithmic potential
-  print*, compute_action_(inst)
-
+!  call compute_profile_(inst,(/ 1.5 /),out=.true.,p_i=4)  ! Logarithmic potential
+  print*, compute_action(inst)
+  
   allocate(ev_r(0:inst%ord),ev_i(0:inst%ord))
   allocate(v_r(0:inst%ord,0:inst%ord))
-  call get_eigenvalues(inst,ev_r,ev_i,0)
-  print*,minval(ev_r)
   call get_eigenvectors(inst,ev_r,ev_i,v_r,0)
-  print*,minval(ev_r)
+  print*,"l = 0 : ",minval(ev_r)
   open(unit=newunit(u),file='eval.dat')
   do i=0,inst%ord
      write(u,*) ev_r(i), ev_i(i)
@@ -65,9 +63,9 @@ program Instanton_Solver
   enddo
   close(u)
   call get_eigenvalues(inst,ev_r,ev_i,1)
-  print*,minval(ev_r)
+  print*,"l = 1 : ",minval(ev_r)
   call get_eigenvalues(inst,ev_r,ev_i,2)
-  print*,minval(ev_r)
+  print*,"l = 2 : ",minval(ev_r)
   
   ! This seems broken at the moment.  Figure out why.  3D vomits and dies horribly
 !  call scan_profiles_(dVals,1,10ls0,.false.)
@@ -120,7 +118,7 @@ contains
 
     dCur = deltas(1)
     call compute_profile_(inst,(/dCur/),out=outL)
-    write(u,*) dCur, compute_action_(inst)
+    write(u,*) dCur, compute_action(inst)
     
     do i=2,size(deltas)
        dCur = deltas(i)
@@ -133,7 +131,7 @@ contains
        else
           call compute_profile_(inst,(/dCur/),out=outL)
        endif
-       write(u,*) dCur, compute_action_(inst)
+       write(u,*) dCur, compute_action(inst)
     enddo
     close(u)
   end subroutine scan_profiles_

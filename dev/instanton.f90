@@ -81,18 +81,18 @@ contains
     inquire(opened=o,unit=u)
     if (.not.o) open(unit=u,file='instanton.dat')
 
-    sz = size(this%phi); phif = this%phi(sz-1)
+    sz = size(this%phi); phif = this%phi(sz-1) ! This isn't happy for the log potential, possibly from huge error in calculation of potential at origin.
     
     phi_spec = matmul(this%tForm%fTrans,this%phi) 
     dphi = matmul(this%tForm%derivs(:,:,1),this%phi)
     d2phi = matmul(this%tForm%derivs(:,:,2),this%phi)
     do i=0,sz-1
-       write(u,*) this%tForm%xGrid(i), this%tForm%weights(i), this%phi(i), potential(this%phi(i)) - potential(phif), vprime(this%phi(i)), vdprime(this%phi(i)), dphi(i), d2phi(i), phi_spec(i), this%tForm%wFunc(i)
+       write(u,*) this%tForm%xGrid(i), this%phi(i), dphi(i), d2phi(i), potential(this%phi(i)) - potential(phif), vprime(this%phi(i)), vdprime(this%phi(i)), phi_spec(i), this%tForm%weights(i), this%tForm%wFunc(i)
     enddo
     write(u,*)    
   end subroutine output_instanton
 
-  function compute_action_(this) result(action)
+  function compute_action(this) result(action)
     type(Instanton), intent(in) :: this
     real(dl), dimension(1:8) :: action
     real(dl), dimension(0:this%ord) :: dfld, lag
@@ -114,7 +114,7 @@ contains
     action(6) = quadrature(this%tForm,(0.5_dl*dfld**2+potential_tw(this%phi))*this%tForm%xGrid(:)**d)
     action(7) = quadrature(this%tForm,this%phi*vprime(this%phi)*this%tForm%xGrid(:)**d)
     action(8) = quadrature(this%tForm, this%tForm%xGrid(:)**(d-1)*lag ) ! Why this index?
-  end function compute_action_
+  end function compute_action
 
   !>@brief
   !> Compute the instanton solution for the symmetry breaking parameter delta
