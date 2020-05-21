@@ -39,7 +39,7 @@ program Instanton_Solver
 !  dVals = 0.5_dl +  10.**([ (-7.+0.2*(i-1), i=size(dVals),1,-1) ] )
   dVals = 10.**([ (-7.+0.2*(i-1), i=1,size(dVals)) ] )
 
-  call compute_profile_(inst,(/ 2./1000._dl**2 /), out=.true.,p_i=3)
+  call compute_profile_(inst,(/ 2./100._dl**2 /), out=.true.,p_i=3)
 !  call compute_profile_(inst,(/ 0.5*10._dl**2 /),out=.true.,p_i=3)
 !  call compute_profile_(inst,(/0.001/),out=.true.,p_i=2)    ! Cubic double well
 !  call compute_profile_(inst,(/ 1.+1.e1 /),out=.true.,p_i=5)    ! Fubini Potential
@@ -48,21 +48,8 @@ program Instanton_Solver
   
   allocate(ev_r(0:inst%ord),ev_i(0:inst%ord))
   allocate(v_r(0:inst%ord,0:inst%ord))
-  call get_eigenvectors(inst,ev_r,ev_i,v_r,0)
+  call get_eigenvectors(inst,ev_r,ev_i,v_r,0,(/.true.,.true./))
   print*,"l = 0 : ",minval(ev_r)
-  open(unit=newunit(u),file='eval.dat')
-  do i=0,inst%ord
-     write(u,*) ev_r(i), ev_i(i)
-  enddo
-  close(u)
-  open(unit=newunit(u),file='evec.dat')
-  do i=0,inst%ord
-     do j=0,inst%ord
-        write(u,*) inst%tForm%xGrid(j), v_r(j,i)
-     enddo
-     write(u,*)
-  enddo
-  close(u)
   call get_eigenvalues(inst,ev_r,ev_i,1)
   print*,"l = 1 : ",minval(ev_r)
   call get_eigenvalues(inst,ev_r,ev_i,2)
