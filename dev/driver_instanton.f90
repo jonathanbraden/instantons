@@ -31,15 +31,16 @@ program Instanton_Solver
   integer :: u, j
   complex(dl), parameter :: iImag = (0._dl,1._dl)
   
-  call create_instanton(inst,25,2)
+  call create_instanton(inst,100,3)
 !  call compute_profile_(inst,0.5*10._dl**2,out=.true.)  
 !  call interp_uniform(inst,2048,50._dl*2._dl**0.5)
 
   nDel = 65; allocate(dVals(1:nDel))
 !  dVals = 0.5_dl +  10.**([ (-7.+0.2*(i-1), i=size(dVals),1,-1) ] )
   dVals = 10.**([ (-7.+0.2*(i-1), i=1,size(dVals)) ] )
-  
-  call compute_profile_(inst,(/ 0.5*100._dl**2 /),out=.true.,p_i=3)
+
+  call compute_profile_(inst,(/ 2./1000._dl**2 /), out=.true.,p_i=3)
+!  call compute_profile_(inst,(/ 0.5*10._dl**2 /),out=.true.,p_i=3)
 !  call compute_profile_(inst,(/0.001/),out=.true.,p_i=2)    ! Cubic double well
 !  call compute_profile_(inst,(/ 1.+1.e1 /),out=.true.,p_i=5)    ! Fubini Potential
 !  call compute_profile_(inst,(/ 1.5 /),out=.true.,p_i=4)  ! Logarithmic potential

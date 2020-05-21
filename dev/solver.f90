@@ -15,6 +15,7 @@
 
 module Nonlinear_Solver
   use constants
+  use Utils, only : newunit
   use Cheby
   use Equations
   use Model
@@ -74,8 +75,7 @@ contains
 #ifdef DEBUG_SOLVER
     call create_solver_storage(this%mat_store,n)
 #endif
-    this%u = 99  ! Change this to a call to the next open file
-    open(unit=this%u,file='solver-output.dat')
+    open(unit=newunit(this%u),file='solver-output.dat')
   end subroutine create_solver
 
   subroutine create_solver_storage(this, n)
