@@ -44,6 +44,7 @@ module Nonlinear_Solver
 #ifdef DEBUG_SOLVER
      type(Solver_Storage) :: mat_store
 #endif
+     logical :: exists = .false.
   end type Solver
 
 !  abstract interface
@@ -67,15 +68,17 @@ contains
     type(Solver), intent(inout) :: this
     integer, intent(in) :: n,nit
     real(dl), intent(in) :: kick
+    if (this%exists) call delete_solver(this)
     this%nVar = n; this%maxIter = nit; this%kick_param = kick
     allocate(this%L(1:n,1:n),this%L_const(1:n,1:n)); allocate(this%S(1:n))
     allocate(this%del(1:n)); allocate(this%f_prev(1:n))
     allocate(this%ipiv(1:n))
     allocate(this%S_prev(1:n))
 #ifdef DEBUG_SOLVER
-    call create_solver_storage(this%mat_store,n)
+    call create_solver_storage(this%mat_store,n)  ! Need to delete this as needed
 #endif
     open(unit=newunit(this%u),file='solver-output.dat')
+    this%exists = .true.
   end subroutine create_solver
 
   subroutine create_solver_storage(this, n)
@@ -92,6 +95,9 @@ contains
     deallocate(this%L, this%L_const, this%S)
     deallocate(this%del, this%f_prev)
     deallocate(this%ipiv)
+    deallocate(this%S_prev)
+    close(this%u)  ! Fix this as needed
+    this%exists = .false.
   end subroutine delete_solver
 
   subroutine solve(this,f_cur,test)

@@ -31,20 +31,20 @@ program Instanton_Solver
   integer :: u, j
   complex(dl), parameter :: iImag = (0._dl,1._dl)
   
-  call create_instanton(inst,100,3)
-!  call compute_profile_(inst,0.5*10._dl**2,out=.true.)  
-!  call interp_uniform(inst,2048,50._dl*2._dl**0.5)
+  call create_instanton(inst,63,2)
 
   nDel = 65; allocate(dVals(1:nDel))
 !  dVals = 0.5_dl +  10.**([ (-7.+0.2*(i-1), i=size(dVals),1,-1) ] )
   dVals = 10.**([ (-7.+0.2*(i-1), i=1,size(dVals)) ] )
 
-  call compute_profile_(inst,(/ 2./100._dl**2 /), out=.true.,p_i=3)
-!  call compute_profile_(inst,(/ 0.5*10._dl**2 /),out=.true.,p_i=3)
+  call compute_profile_(inst,(/ 2./10._dl**2 /), out=.true.,p_i=3) ! Drummond new normalisation
+!  call compute_profile_(inst,(/ 0.5*10._dl**2 /),out=.true.,p_i=3) ! Drummond old normalisation
 !  call compute_profile_(inst,(/0.001/),out=.true.,p_i=2)    ! Cubic double well
 !  call compute_profile_(inst,(/ 1.+1.e1 /),out=.true.,p_i=5)    ! Fubini Potential
-!  call compute_profile_(inst,(/ 1.5 /),out=.true.,p_i=4)  ! Logarithmic potential
+  !  call compute_profile_(inst,(/ 1.5 /),out=.true.,p_i=4)  ! Logarithmic potential
+  print*,"Action Components are :"
   print*, compute_action(inst)
+  !call interp_uniform(inst,2048,50._dl*2._dl**0.5)
   
   allocate(ev_r(0:inst%ord),ev_i(0:inst%ord))
   allocate(v_r(0:inst%ord,0:inst%ord))
@@ -57,9 +57,29 @@ program Instanton_Solver
   
   ! This seems broken at the moment.  Figure out why.  3D vomits and dies horribly
 !  call scan_profiles_(dVals,1,10ls0,.false.)
+  call scan_resolutions((/ 2./2._dl**2 /),2)
   
 contains
 
+  subroutine scan_resolutions(par,d)
+    real(dl), dimension(:), intent(in) :: par
+    integer, intent(in) :: d
+    type(Instanton) :: inst
+    integer :: u1,u2
+    integer :: i,o
+
+    open(unit=newunit(u1),file="actions.dat"); open(unit=newunit(u2),file="profiles.dat")
+    do i=2,200,4
+       !o = 2**i-1
+       o = i
+       call create_instanton(inst,o,d)
+       call compute_profile_(inst,par,out=.false.,p_i=3)
+       write(u1,*) o, compute_action(inst)
+       ! Add interpolation and output of profiles here
+    enddo
+    close(u1); close(u2)
+  end subroutine scan_resolutions
+  
   !>@brief
   !> Interpolate the instanton profile onto a uniform grid for external simulation
   subroutine interp_uniform(this,nlat,len)

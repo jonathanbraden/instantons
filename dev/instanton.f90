@@ -16,6 +16,25 @@ module Instanton_Class
      logical :: exists = .false.
      integer :: unit = -1
   end type Instanton
+
+#ifdef FULL_OO
+  ! New version with functions included
+  ! This is just prototyping so I remember how to do this
+  type Instanton_
+     type(Chebyshev) :: tForm
+     real(dl), dimension(:), allocatable :: phi
+     integer :: ord
+     integer :: dim   ! Generalise to noninteger
+     real(dl) :: l, w ! specifies grid
+     real(dl) :: r0, meff, phif, phit  ! Specifies initial bubble
+     logical :: exists = .false.
+     integer :: unit=-1
+   contains
+     procedure :: pot
+     procedure :: vprime
+     procedure :: vdprime
+  end type Instanton_
+#endif
   
 contains
 
@@ -26,7 +45,7 @@ contains
     type(Instanton), intent(out) :: this
     integer, intent(in) :: ord,d
     this%dim = d; this%ord = ord
-    if (allocated(this%phi)) deallocate(this%phi) ! Remove this to only allocate if size has changed
+    if (allocated(this%phi)) deallocate(this%phi)
     allocate(this%phi(0:ord))
     this%exists = .true.
     this%unit = 56    !! Fix this to be automated
@@ -167,15 +186,11 @@ contains
     else
        call profile_guess(this,r0,meff,phif,phit,p_loc) ! Even better, pass a function with parameters in
     endif
-
-    open(unit=newunit(u),file='ic.dat')
-    do i=0,order
-       write(u,*) this%tForm%xGrid(i), this%phi(i)
-    enddo
     
     call solve(solv,this%phi)
 
     if (outLoc) call output_instanton(this)
+    call delete_solver(solv)
   end subroutine compute_profile_
 
 !!!! This functionality should be moved into the chebyshev code
@@ -273,7 +288,7 @@ contains
     real(dl), intent(in) :: r0,m,phif,phit
     real(dl), dimension(1:size(x)), intent(out) :: f
 
-    f(:) = (phif-phit)*(2._dl/pi)*atan(exp(1.5*m*(x(:)-r0))) + phit
+    f(:) = (phif-phit)*(2._dl/pi)*atan(exp(0.5_dl*pi*m*(x(:)-r0))) + phit
   end subroutine atan_profile
 
   !>@brief
