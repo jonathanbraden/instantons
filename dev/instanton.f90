@@ -171,6 +171,7 @@ contains
     call set_model_params(params,dim)
     call get_minima(phif,phit)  ! Change this to pass in params
     call bubble_parameters_nd_(params(1),dim*1._dl,r0,meff)  ! Change this to pass in params
+    print*,r0,meff
     if (present(grid)) then
        len = grid(1); w = grid(2)
     else

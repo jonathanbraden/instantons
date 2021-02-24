@@ -66,4 +66,61 @@ contains
 
   end subroutine invert_matrix
 
+#ifdef WRAPPERS
+  !>@brief
+  !> Wrapper for DGEEV that automatically assigns workspace
+  subroutine compute_eigenvalues(A,ev_r,ev_i)
+    real(dl), dimension(:,:), intent(in) :: A
+    real(dl), dimension(:), intent(out) :: ev_r,ev_i
+
+    real(dl), dimension(:), allocatable :: work
+    integer :: iwork, npt
+    real(dl), dimension(1) :: dummy
+
+    npt = size(ev_r)  ! fix this
+    call DGEEV('N','N', ,A, ,ev_r,ev_i,dummy,1,dummy,1,dummy,-1,ierror)
+    if (ierror == 0) then
+       iwork = int(dummy(1))
+       allocate(work(1:iwork))
+    endif
+    call DGEEV('N','N',npt,A,npt,ev_r,ev_i,dummy,1,dummy,1,work,iwork,ierror)
+    deallocate(work)
+  end subroutine compute_eigenvalues
+
+  ! Combine this with the above by making evec and optional 
+  subroutine compute_eigenvalues_eigenvectors(A,ev_r,ev_i,evec)
+    real(dl), dimension(:,:), intent(in) :: A
+    real(dl), dimension(:), intent(out) :: ev_r,ev_i
+    real(dl), dimension(:,:), intent(out), optional :: evec
+    
+    integer :: npt, ierror
+    real(dl), dimension(:), allocatable :: work
+    integer :: iwork
+    real(dl), dimension(1) :: dummy
+    logical :: get_vec
+
+    get_vec = .false.; if (present(evec)) get_vec = .true.
+
+    npt = size(ev_r)
+
+    if (get_vec) then
+       call DGEEV('N','V',npt,A,npt,ev_r,ev_i,dummy,1,evec,npt,dummy,-1,ierror)
+    else
+       call DGEEV('N','N',npt,A,npt,ev_r,ev_i,dummy,1,dummy,1,dummy,-1,ierror)
+    endif
+    
+    if (ierror == 0) then
+       iwork = int(dummy(1))
+       allocate(work(1:iwork))
+    endif
+
+    if (get_vec) then
+       call DGEEV('N','V',npt,op,npt,ev_r,ev_i,dummy,1,evec,npt,work,iwork,ierror)
+    else
+       call DGEEV('N','V',npt,op,npt,ev_r,ev_i,dummy,1,evec,npt,work,iwork,ierror)
+    endif
+    deallocate(work)
+  end subroutine compute_eigenvalues_eigenvectors
+#endif
+  
 end module Matrix

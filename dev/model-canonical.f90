@@ -10,34 +10,29 @@
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 ! Preprocessors for inlining.  Could also move this to another file
-#define POTENTIAL(f) ( 0.25_dl*(f**2-1._dl)**2 + del*(f**3/3._dl-f) )
-#define VPRIME(f) ( (f+del)*(f**2-1._dl) )
-#define VDPRIME(f) ( 3._dl*f**2 - 1._dl + 2._dl*del*f )
-
-!#define POTENTIAL(f) ( 0.125_dl*(f**2-1._dl)**2 + 0.5_dl*del*(f-1._dl) )
-!#define VPRIME(f) ( 0.5_dl*f*(f**2-1._dl) + 0.5_dl*del )
-!#define VDPRIME(f) ( 1.5_dl*f**2-0.5_dl )
+#define POTENTIAL(f) ( cos(f) + del*sin(f)**2 + 1._dl )
+#define VPRIME(f) ( -sin(f) + del*sin(2._dl*f) )
+#define VDPRIME(f) ( -cos(f) + 2._dl*del*cos(2._dl*f) )
 
 module Model
   use constants
   use Cheby
   implicit none
-  private :: ndim, del
+  private :: del
   
   real(dl) :: del
-  integer :: ndim
 
 contains
 
   subroutine set_model_params(params,dim)
     real(dl), dimension(1), intent(in) :: params
     integer, intent(in) :: dim
-    del = params(1); ndim = dim
+    del = params(1)
   end subroutine set_model_params
   
   subroutine get_minima(phif,phit)
     real(dl), intent(out) :: phif, phit
-    phif = -1._dl; phit = 1._dl
+    phif = 0._dl; phit = pi
   end subroutine get_minima
   
   elemental function potential(phi)
@@ -66,7 +61,7 @@ contains
   subroutine grid_params_(w,len,r0,w0)
     real(dl), intent(out) :: w, len
     real(dl), intent(in) :: r0, w0
-    real(dl), parameter :: wscl = 8.96_dl   ! decent for cubic, need to tweak delta -> 1 part
+    real(dl), parameter :: wscl = 6.3_dl   ! TWEAK THIS!!!!!
     
     len = r0*3._dl**0.5
     w = wscl * w0 / r0
@@ -76,14 +71,13 @@ contains
     endif
   end subroutine grid_params_
   
-  ! These need to be adjusted for very model.  Might be worth moving it
   ! Change delta to parameters for the model
   subroutine bubble_parameters_nd_(delta,dim,r0,meff)
     real(dl), intent(in) :: delta, dim
     real(dl), intent(out) :: r0, meff
 
-    meff = sqrt(2._dl)
-    r0 = dim / (sqrt(2._dl)*delta)
+    meff = sqrt(2._dl*delta)!*(1._dl-0.25*dl**2/delta**2)**0.5
+    r0 = dim * sqrt(2._dl*delta)
   end subroutine bubble_parameters_nd_
 
   !>@brief
@@ -91,7 +85,7 @@ contains
   elemental function potential_tw(phi)
     real(dl) :: potential_tw
     real(dl), intent(in) :: phi
-    potential_tw = 0.25_dl*(phi**2-1._dl)**2
+    potential_tw = del*sin(phi)**2
   end function potential_tw
 
   !>@brief
