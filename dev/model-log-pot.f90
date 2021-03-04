@@ -9,31 +9,27 @@
 !>
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-! Preprocessors for inlining.  Could also move this to another file
-!#define POTENTIAL(f) ( 0.5_dl*(eps**2+1._dl)*f**2 - 0.5_dl*(f**2+eps**2)*log(f**2 + eps**2) )
-!#define VPRIME(f) ( -f*(log(f**2+eps**2) - eps**2) )
-!#define VDPRIME(f) ( -log(f**2+eps**2) - 2._dl*f**2/(f**2+eps**2) + eps**2 )
-
+! Preprocessors for inlining.
 #define POTENTIAL(f) ( 0.5_dl*f**2*(1._dl-log(f**2 + eps**2)) )
 #define VPRIME(f) ( -f*(log(f**2+eps**2) - eps**2/(f**2+eps**2)) )
 #define VDPRIME(f) ( -log(f**2+eps**2) + (eps**4-3._dl*eps**2*f**2-2._dl*f**4)/(eps**2+f**2)**2 )
-
-! This set isn't working yet
-!#define POTENTIAL(f) ( 0.5_dl*(f**2-(f**2+eps**2)*log(f**2 + eps**2) + eps**2*log(eps**2)) )
-!#define VPRIME(f) ( -f*log(f**2+eps**2) )
-!#define VDPRIME(f) ( -log(f**2+eps**2) - 2._dl*f**2/(f**2+eps**2) )
 
 
 module Model
   use constants
   use Cheby
   implicit none
-  private :: eps
+  private :: eps, i_
   
   real(dl) :: eps
-
+  real(dl), parameter :: eps_min = 0._dl, eps_max = exp(0.5_dl)
+  integer :: i_
+  integer, parameter :: nEps = 200
+  real(dl), parameter :: log_e_min = -7._dl
+  real(dl), parameter :: scanVals(nEps) = 10.**(/ ( log_e_min + (i_-1)*(log10(eps_max)-log_e_min)/dble(100) , i_=1,nEps ) /)  ! Scan parameters
+  
 contains
-
+  
   subroutine set_model_params(params,dim)
     real(dl), dimension(1), intent(in) :: params
     integer, intent(in) :: dim

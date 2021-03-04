@@ -66,7 +66,7 @@ contains
     len = r0*3._dl**0.5
     w = wscl * w0 / r0
     if (w0 > r0) then
-       len = w0*3._dl**0.5
+       len = 3._dl**0.5*w0
        w = 1._dl
     endif
   end subroutine grid_params_
@@ -76,7 +76,7 @@ contains
     real(dl), intent(in) :: delta, dim
     real(dl), intent(out) :: r0, meff
 
-    meff = sqrt(2._dl*delta)!*(1._dl-0.25*dl**2/delta**2)**0.5
+    meff = sqrt(2._dl*delta)*(1._dl-0.25_dl/delta**2)**0.5
     r0 = dim * sqrt(2._dl*delta)
   end subroutine bubble_parameters_nd_
 

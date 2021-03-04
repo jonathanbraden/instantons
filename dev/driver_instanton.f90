@@ -33,11 +33,21 @@ program Instanton_Solver
 
   integer, dimension(1) :: i1
   
-  call create_instanton(inst,200,1)
+  call create_instanton(inst,100,2)
 
-  nDel = 65; allocate(dVals(1:nDel))
-  dVals = 0.5_dl +  10.**([ (-7.+0.2*(i-1), i=size(dVals),1,-1) ] )
-!  call scan_profiles_(dVals,1,200,.false.)
+!  nDel = 100; allocate(dVals(1:nDel))
+!  dVals = 0.5_dl +  10.**([ (-10.+0.2*(i-1), i=size(dVals),1,-1) ] )
+  nDel = 100; allocate(dVals(1:nDel))
+!  dVals = 10.**([ (-5. + (i-1)*log10(eps_max)/dble(nDel), i=size(dVals),1) ])
+
+  call scan_profiles_(scanVals,2,100,out=.true.,prof_type=4)
+  
+!  call compute_profile_(inst,(/ 0.1 /), out=.true.,p_i=4)
+!  call compute_profile_(inst,(/ 0.5 /), out=.true.,p_i=4)
+!  call compute_profile_(inst,(/ 1. /), out=.true.,p_i=4)
+!  call compute_profile_(inst,(/ 1.5 /), out=.true.,p_i=4)
+  
+  !  call scan_profiles_(dVals,1,200,.false.)
 !  dVals = 10.**([ (-7.+0.2*(i-1), i=1,size(dVals)) ] )
 
 !  call compute_profile_(inst,(/ 2./10._dl**2 /), out=.true.,p_i=3) ! Drummond new normalisation
@@ -49,10 +59,14 @@ program Instanton_Solver
 !  print*, compute_action(inst)
   !call interp_uniform(inst,2048,50._dl*2._dl**0.5)
 
-  call compute_profile_(inst,(/ 0.5*1000._dl**2 /),out=.true.,p_i=3)
-  print*,compute_action(inst)
-  call interp_uniform(inst,256,50.*2.**0.5)
-  call interp_simulation(inst,2048,2.*50.*2.**0.5)
+!  call compute_profile_(inst,(/ 0.5*1.2_dl**2 /),out=.true.,p_i=3)
+!  print*,compute_action(inst)
+#ifdef MORE
+  call compute_profile_(inst,(/ 0.5*1.5_dl**2 /),out=.true.,p_i=3)
+  call compute_profile_(inst,(/ 0.5*1.6_dl**2 /),out=.true.,p_i=3)
+  call compute_profile_(inst,(/ 0.5*6._dl**2 /),out=.true.,p_i=3)
+!  call interp_uniform(inst,256,50.*2.**0.5)
+!  call interp_simulation(inst,2048,16._dl*4.)
   
   allocate(ev_r(0:inst%ord),ev_i(0:inst%ord))
   allocate(v_r(0:inst%ord,0:inst%ord))
@@ -64,12 +78,12 @@ program Instanton_Solver
   print*,"l = 1 : ",minval(ev_r)
   call get_eigenvalues(inst,ev_r,ev_i,2)
   print*,"l = 2 : ",minval(ev_r)
-  
+#endif  
   ! This seems broken at the moment.  Figure out why.  3D vomits and dies horribly
-!  call scan_profiles_(dVals,1,10ls0,.false.)
+!  call scan_profiles_(dVals,2,200,out=.true.)
 !  call scan_resolutions((/ 2./2._dl**2 /),2)
 
-  dVals = ([ (0.5*(1.02+0.02*(i-1))**2 ,i=1,size(dVals)) ])
+!  dVals = ([ (0.5*(1.02+0.02*(i-1))**2 ,i=1,size(dVals)) ])
 !  call scan_eigens(dVals,63,2)
   
 contains
@@ -150,7 +164,16 @@ contains
     close(u)
   end subroutine interp_uniform
 
-  !!! Point nlat/2 is the origin, means I need nlat/2-1 to the left (for even), nlat/2+1 is origin for odd
+!!! Point nlat/2 is the origin, means I need nlat/2-1 to the left (for even), nlat/2+1 is origin for odd
+  !>@brief
+  !> Interpolate the instanton onto a specified simulation grid.
+  !> The output is stored in instanton_sim.dat, with the first column being the field values and the second column the time derivative.
+  !> Each row corresponds to a single lattice site (so that the x-grid is in units of the lattice spacing)
+  !> The instanton is centered in the middle of the simulation grid.
+  !>
+  !>@param[in] this - the instanton solution to be interpolated (type(Instanton))
+  !>@param[in] nlat - the number of lattice sites in the simulation
+  !>@param[in] len  - length of the simulation
   subroutine interp_simulation(this,nlat,len)
     type(Instanton), intent(in) :: this
     integer, intent(in) :: nlat
@@ -222,10 +245,11 @@ contains
   
   !>@todo Write this to include the adjustment of the initial bubble profile
   !>@todo Remove need for chebyshev_grid, or put it in the pseudospec module
-  subroutine scan_profiles_(deltas,dim,ord,out)
+  subroutine scan_profiles_(deltas,dim,ord,out,prof_type)
     real(dl), dimension(:), intent(in) :: deltas
     integer, intent(in) :: dim, ord
     logical, intent(in), optional :: out
+    integer, intent(in), optional :: prof_type
 
     type(Instanton) :: inst
     real(dl) :: dCur
@@ -235,31 +259,43 @@ contains
     real(dl) :: r0, meff, phif, phit
     real(dl) :: len, w
     real(dl), dimension(0:ord) :: xNew, phi_prev
-    
+    integer :: p_i
+
+    p_i = 3; if (present(prof_type)) p_i = prof_type
     outL = .false.; if (present(out)) outL = out
     open(unit=newunit(u),file='actions.dat')
     call create_instanton(inst,ord,dim)
 
     dCur = deltas(1)
-    call compute_profile_(inst,(/dCur/),out=outL,p_i=3)
+    call compute_profile_(inst,(/dCur/),out=outL,p_i=p_i)
     write(u,*) dCur, compute_action(inst)
     
     do i=2,size(deltas)
        dCur = deltas(i)
-       if ( prev_test(inst) ) then
+       !if ( prev_test(inst) ) then
+       !if (dCur < 1._dl) then
+       if (.false.) then
+          print*,"using interp"
           call bubble_parameters_nd_(dCur,dim*1._dl,r0,meff); call grid_params_(w,len,r0,1._dl/meff)
           xNew = chebyshev_grid(inst%ord,len,w)
           phi_prev = interpolate_instanton_(inst,xNew)
-          call compute_profile_(inst,(/dCur/),phi_prev)
+          call compute_profile_(inst,(/dCur/),phi_prev,out=outL)
           !call compute_profile_(inst,dCur,interpolate_instanton_(inst,chebyshev_grid(ord,len,w))) ! This avoids declaring some arrays, but requires more memory assignment
        else
-          call compute_profile_(inst,(/dCur/),out=outL)
+          print*,dCur,"using guess"
+          call compute_profile_(inst,(/dCur/),out=outL,p_i=p_i)
        endif
        write(u,*) dCur, compute_action(inst)
     enddo
     close(u)
   end subroutine scan_profiles_
 
+  function prev_test_log(inst) result(prev)
+    type(Instanton), intent(in) :: inst
+    logical :: prev
+
+  end function prev_test_log
+    
   function prev_test(inst) result(prev)
     type(Instanton), intent(in) :: inst
     logical :: prev
