@@ -10,7 +10,7 @@
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 ! Preprocessors for inlining.  Could also move this to another file
-#define POTENTIAL(f) ( cos(f) + del*sin(f)**2 + 1._dl )
+#define POTENTIAL(f) ( cos(f) + del*sin(f)**2 - 1._dl )
 #define VPRIME(f) ( -sin(f) + del*sin(2._dl*f) )
 #define VDPRIME(f) ( -cos(f) + 2._dl*del*cos(2._dl*f) )
 
@@ -62,7 +62,7 @@ contains
   end function vdprime
 
   subroutine get_grid_params(params,dim,len,scl)
-    real(dl), dimension(1), intent(in) :: params
+    real(dl), dimension(1:nPar), intent(in) :: params
     real(dl), intent(in) :: dim
     real(dl), intent(out) :: len, scl
 
