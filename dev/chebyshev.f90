@@ -1,3 +1,5 @@
+!#def PRINT_WARNINGS T
+
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
 ! MODULE: Chebyshev
@@ -92,14 +94,20 @@ module Cheby
      real(dl), allocatable :: fTrans(:,:)
      real(dl), allocatable :: invTrans(:,:)
      real(dl), allocatable :: derivs(:,:,:)
-     real(dl), allocatable :: wFunc(:)
+     real(dl), allocatable :: wFunc(:), w_quad(:)
+
+     character(4) :: grid  ! Add this functionality
+     character(4) :: transforms  ! Add this functionality
+     real(dl), dimension(:), allocatable :: transform_params
      real(dl) :: len, scl
+     real(dl) :: pow
+     logical :: evens=.false.
+
      logical :: init=.false.
   end type Chebyshev
 
 contains
-
-!#ifdef INCLUDE_FUNCTIONS
+  
   type(Chebyshev) function new_chebyshev_finite(ord,evens,w) result(tForm)
     integer, intent(in) :: ord
     logical, intent(in) :: evens
@@ -120,7 +128,7 @@ contains
     call transform_semi_infinite(tForm,len)
   end function new_chebyshev_semi_infinite
 
-  type(Chebyshev) function chebyshev_double_infinite(ord,len,evens,w) result(tForm)
+  type(Chebyshev) function new_chebyshev_double_infinite(ord,len,evens,w) result(tForm)
     integer, intent(in) :: ord
     real(dl), intent(in) :: len
     logical, intent(in) :: evens
@@ -129,9 +137,19 @@ contains
     tForm = new_chebyshev_finite(ord,evens)
     if (present(w)) call cluster_points(tForm,w,evens)
     call transform_double_infinite(tForm,len)
-  end function chebyshev_double_infinite
-!#endif
+  end function new_chebyshev_double_infinite
 
+  type(Chebyshev) function new_chebyshev_double_infinite_rational(ord,len,pow,evens,w) result(tForm)
+    integer, intent(in) :: ord
+    real(dl), intent(in) :: len, pow
+    logical, intent(in) :: evens
+    real(dl), intent(in), optional :: w
+
+    tForm = new_chebyshev_finite(ord,evens)
+    if (present(w)) call cluster_points(tForm,w,evens)
+    call transform_double_infinite_rational(tForm,len,pow)
+  end function new_chebyshev_double_infinite_rational
+  
   !>@brief
   !> Create a Chebyshev transformation object to do polynomial approximation of order ord
   !>
@@ -149,7 +167,6 @@ contains
     integer :: i
 
     this%len = -1._dl; this%scl = 1._dl
-
     if (this%init) call destroy_chebyshev(this)
     call allocate_chebyshev(this, ord, nd)
 
@@ -160,16 +177,18 @@ contains
        call chebyshev_gauss_nodes(this%xGrid,this%weights,this%ord)
     endif
 
-    ! Fix this
+    ! Fix this to include the Radau grid
+    ! Is this being overwritten when I call compute_basis norms?
+    ! What if I comment this out?  Does anything break?
     this%norm = pi
     this%norm(0) = 0.5_dl*this%norm(0)
-    if (end) this%norm(ord) = 0.5_dl*this%norm(ord)
+    if (end) this%norm(ord) = 0.5_dl*this%norm(ord) ! Why the hell is this one different?
 
     ! Evaluate the basis functions on the collocation grid
     do i=0,ord
        x = this%xGrid(i)
 !          call evaluate_chebyshev(ord,x,BVals,nd)
-       call evaluate_chebyshev_trig(ord,x,BVals,nd)
+       call evaluate_chebyshev_trig(ord,x,BVals,nd)  ! Will break for endpoints
        this%invTrans(i,:) = BVals(:,0)
        this%derivs(i,:,1:nd) = BVals(:,1:nd)
     enddo
@@ -188,10 +207,74 @@ contains
 #endif
     enddo
 
-    this%wFunc = sqrt(1._dl-this%xGrid(:)**2)  ! Move this somewhere else
+    this%wFunc(:) = sqrt(1._dl-this%xGrid(:)**2)  ! Move this somewhere else
+    this%w_quad(:) = this%weights(:)*this%wFunc(:)
     this%init = .true.
   end subroutine create_chebyshev
 
+  subroutine create_chebyshev_full(this,ord,nd,grid,num_inv)
+    type(Chebyshev), intent(out) :: this
+    integer, intent(in) :: ord, nd
+    character(4), intent(in) :: grid
+    logical, intent(in) :: num_inv
+
+    real(dl) :: x, BVals(0:ord,0:nd) ! figure out how to remove BVals
+    integer :: npt
+    integer :: i
+    
+    this%len = -1._dl; this%scl = 1._dl  ! See if I need this (better to store parameters for the transform
+    if (this%init) call destroy_chebyshev(this)
+    call allocate_chebyshev(this, ord, nd)
+
+    select case (grid)
+    case ('MIDS')
+       call chebyshev_gauss_nodes(this%xGrid,this%weights,this%ord)
+       this%grid = 'MIDS'
+    case ('ENDS')
+       call chebyshev_lobatto_nodes(this%xGrid,this%weights,this%ord)
+       this%grid = 'ENDS'
+    case ('LEFT')
+       call chebyshev_radau_L_nodes(this%xGrid,this%weights,this%ord)
+       this%grid = 'LEFT'
+    case ('RGHT')
+       call chebyshev_radau_R_nodes(this%xGrid,this%weights,this%ord)
+       this%grid = 'RGHT'
+    case default
+       print*,"Invalid Collocation Grid"
+       this%grid = 'NONE'
+    end select
+    
+    ! Evaluate the basis functions on the collocation grid
+    do i=0,ord
+       x = this%xGrid(i)
+       call evaluate_chebyshev(ord,x,BVals,nd)
+!       call evaluate_chebyshev_trig(ord,x,BVals,nd)  ! Will break for endpoints
+       this%invTrans(i,:) = BVals(:,0)
+       this%derivs(i,:,1:nd) = BVals(:,1:nd)
+    enddo
+    
+    ! Find a more elegant way to remove the dependence on end.
+    call compute_basis_norms(this,num_sum=.true.)
+!    call make_mmt(this,num_inv,end)  ! Dig into this to see if I need it
+    call make_mmt(this,num_inv,.false.) ! This shouldn't be hardcoded in evens parameter
+    
+    !>@todo
+    !> Rather than doing a numerical matrix multiplication here, use explicit formulas in the above loop
+    !> Add DGEMM support
+    npt = ord + 1
+    do i=1,nd
+#ifdef USEBLAS
+!       call DGEMM('N','N',npt,npt,npt,1._dl,this%derivs(:,:,i),npt,this%fTrans(:,:),npt,)
+#else
+       this%derivs(:,:,i) = matmul(this%derivs(:,:,i),this%fTrans(:,:))
+#endif
+    enddo
+
+    this%wFunc(:) = sqrt(1._dl-this%xGrid(:)**2)  ! Move this somewhere else
+    this%w_quad(:) = this%weights(:)*this%wFunc(:)
+    this%init = .true.
+  end subroutine create_chebyshev_full
+  
   !>@brief
   !> Free the memory stored in the input Chebyshev object
   !>
@@ -204,6 +287,7 @@ contains
        deallocate(this%xGrid,this%weights,this%norm)
        deallocate(this%fTrans,this%invTrans)
        deallocate(this%derivs)
+       deallocate(this%wFunc,this%w_quad)
     endif
     this%init = .false.
   end subroutine destroy_chebyshev
@@ -224,7 +308,7 @@ contains
     allocate( this%invTrans(0:ord,0:ord) )
     allocate( this%derivs(0:ord,0:ord,1:nd) )
 
-    allocate( this%wFunc(0:ord) )
+    allocate( this%wFunc(0:ord), this%w_quad(0:ord) )
   end subroutine allocate_chebyshev
   
   !>@brief
@@ -243,8 +327,26 @@ contains
     new_t%xGrid = old%xGrid; new_t%weights = old%weights; new_t%norm = old%norm
     new_t%fTrans = old%fTrans; new_t%invTrans = old%invTrans
     new_t%derivs = old%derivs
+    new_t%wFunc = old%wFunc; new_t%w_quad = old%w_quad
     new_t%init = .true.
   end subroutine copy_chebyshev
+
+  !>@brief
+  !> Write details about the quadrature grid, including the weights, continuum weights,
+  !> and weights needed to do a direct sum
+  !>
+  !>@todo
+  !>@arg Write this thing properly
+  subroutine output_quadrature_grid(this)
+    type(Chebyshev), intent(in) :: this
+    integer :: u, i
+    u=90
+    open(unit=u,file='chebyshev-grid.dat')
+    do i=0,this%ord
+       write(u,*) this%xGrid(i), this%weights(i), this%w_quad(i)
+    enddo
+    write(u,*)
+  end subroutine output_quadrature_grid
   
   !>@brief
   !> Write the basis functions used by the transform to file
@@ -269,12 +371,24 @@ contains
 
   !>@brief
   !> Compute the norms of the basis polynomials based on the numerical quadrature
-  subroutine compute_basis_norms(this)
+  subroutine compute_basis_norms(this,num_sum)
     type(Chebyshev), intent(inout) :: this
+    logical, intent(in), optional :: num_sum
+
     integer :: i
-    do i=0,this%ord
-       this%norm(i) = sum(this%weights(:)*this%invTrans(:,i)**2)
-    enddo
+    logical :: num_
+
+    num_ = .true.; if (present(num_sum)) num_ = num_sum
+
+    if (num_) then
+       do i=0,this%ord
+          this%norm(i) = sum(this%weights(:)*this%invTrans(:,i)**2)
+       enddo
+    else
+       this%norm(0) = twopi; this%norm(1:) = pi
+       ! Lobatto isn't exact when computing the square of the final basis function
+       if (this%grid=='ENDS') this%norm(this%ord) = twopi 
+    endif
   end subroutine compute_basis_norms
   
   !>@brief
@@ -343,27 +457,41 @@ contains
   
   !>@brief
   !> Evaluate the given function via numerical quadrature
+  !>  \f[
+  !>    I = \int f(x) dx \approx sum_i f(x_i)w_i
+  !>  \f]
+  !> Returns the value of \f$I\f$ as defined above.
   !>
   !>@todo
   !>@arg For the chebyshev, implement this more efficiently since the weights are trivial
   real(dl) function quadrature(this,fVals) result(quad)
     type(Chebyshev), intent(in) :: this
-    real(dl), dimension(:), intent(in) :: fVals
+    real(dl), dimension(0:this%ord), intent(in) :: fVals
 
-    ! Add a check that weights and f are the same size.  Add a preprocessor flag to include
-#ifdef ERRORS
-    if ( size(f) /= size(this%weights) ) then
-       print*,"Error, size of function and order of polynomial expansion are incompatible"
-    endif
-#endif
-    quad = sum(this%weights(:)*this%wFunc(:)*fVals(:))
-
+    !quad = sum(this%weights(:)*this%wFunc(:)*fVals(:))
+    quad = sum(this%w_quad(:)*fVals(:))
 #ifdef FAST_QUAD
     quad = sum(fVals(:))
     quad = quad*(pi/dble(order))
 #endif
   end function quadrature
 
+  !>@brief
+  !> Evaluate the integral of the given function times the continuum weight function
+  !> appropriate for the remapped collocation grid using numerical quadrature
+  !>  \f[
+  !>    I \equiv \int w(x)f(x)dx
+  !>  \f]
+  !> Returns the value of \f$I\f$ as defined above
+  !>
+  !>@param[in] this  They Chebyshev object storing the collocation grid information
+  !>@param[in] fVals The function values evaluated at the collocation points
+  real(dl) function quadrature_w_weight(this,fVals) result(quad)
+    type(Chebyshev), intent(in) :: this
+    real(dl), dimension(0:this%ord), intent(in) :: fVals
+    quad = sum( this%weights(:)*fVals(:) )
+  end function quadrature_w_weight
+    
   !>@brief
   !> Evaluate the given function (passed as a function pointer) using numerical quadrature
   !>
@@ -521,17 +649,16 @@ contains
     type(Chebyshev), intent(in) :: this
     real(dl), intent(in) :: fVals(:), xNew(1:)
     real(dl), intent(out) :: fNew(:)
-    integer :: n,o, i
-    real(dl), allocatable :: B_tmp(:,:), spec(:)
+    
+    integer :: n,o,i
+    real(dl) :: spec(0:this%ord), B_tmp(0:this%ord,0:2)
 
     ! Add error check to make sure xNew and fNew are the same size
     ! Make sure that the indexing of xNew actually starts at 1 when it's defined implicitly
     ! as it is here
 
     fNew = 0._dl
-    
     n = size(xNew); o = this%ord
-    allocate(B_tmp(0:o,0:2)); allocate(spec(0:o))
 #ifdef USEBLAS
     call DGEMV
 #else
@@ -564,7 +691,6 @@ contains
     do i=0,order
        x(i) = -dcos( dble(2*i+1)*dkcol )
     enddo
-    print*,""
     !w = 2._dl / dble(order+1)  ! wrong one
     w = 1._dl*pi / dble(order+1)
   end subroutine chebyshev_gauss_nodes
@@ -586,10 +712,48 @@ contains
     do i=0,order
        x(i) = -dcos(dble(i)*dkcol)
     enddo
-    w = 1._dl*pi / dble(order)
+    w = pi / dble(order)
     w(0) = 0.5_dl*pi / dble(order); w(order) = 0.5_dl*pi / dble(order)
   end subroutine chebyshev_lobatto_nodes
 
+!!!! Need to test both of these
+!!!! I'm pretty sure the weights in the textbook on spectral methods for turbulence have a typo, which then got transferred here, so need to check these
+  
+  !>@brief
+  !> Compute the Gauss-Chebyshev-Raud abscissa and weights, with the left endpoint included in the grid.
+  subroutine chebyshev_radau_R_nodes(x,w,order)
+    integer, intent(in) :: order
+    real(dl), dimension(0:order), intent(out) :: x,w
+    double precision :: dkcol
+    integer :: i
+
+    dkcol = pi/(2._dl*dble(order)+1._dl)
+    do i=0,order
+       x(i) = -dcos((2._dl*dble(i)+1._dl)*dkcol)
+    enddo
+    w(0:order-1) = twopi/(2._dl*dble(order)+1._dl)
+    w(order) = pi/(2._dl*dble(order)+1._dl)
+  end subroutine chebyshev_radau_R_nodes
+
+    !>@brief
+  !> Compute the Gauss-Chebyshev-Radau abscissa and weights, with the right endpoint included in the grid.
+  subroutine chebyshev_radau_L_nodes(x,w,order)
+    integer, intent(in) :: order
+    real(dl), dimension(0:order), intent(out) :: x,w
+    double precision :: dkcol
+    integer :: i
+
+    dkcol = twopi/(2._dl*dble(order)+1._dl)
+    do i=0,order
+       x(i) = -dcos(dble(i)*dkcol)
+    enddo
+    w(1:order) = twopi/(2._dl*dble(order)+1._dl)
+    w(0) = pi/(2._dl*dble(order)+1._dl)
+  end subroutine chebyshev_radau_L_nodes
+
+!!! Finish testing
+
+  
   !>@brief
   !> Make transform matrix from real space to spectral space  
   !>
@@ -669,6 +833,7 @@ contains
     enddo
     call transform_derivatives(this,dmap)
     deallocate( dmap )
+    this%evens = .true.
   end subroutine transform_to_evens
   
   !>@brief
@@ -707,20 +872,51 @@ contains
   subroutine transform_semi_infinite(this, len)
     type(Chebyshev), intent(inout) :: this
     real(dl), intent(in) :: len
-    integer :: ord
-    real(dl), dimension(:,:), allocatable :: dmap
+    real(dl), dimension(0:this%ord,this%nDeriv) :: dmap
 
     this%len = len
-    ord = this%ord
     this%xGrid(:) = len*( (1._dl+this%xGrid(:))/(1._dl-this%xGrid(:)) )
-    allocate( dmap(0:this%ord,this%nDeriv) )
     dmap(:,1) = 2._dl*len / (len+this%xGrid)**2
     dmap(:,2) = -4._dl*len / (len+this%xGrid)**3
     
     call transform_derivatives(this,dmap)
-    deallocate(dmap)
   end subroutine transform_semi_infinite
 
+  subroutine transform_double_infinite_rational(this,l,p)
+    type(Chebyshev), intent(inout) :: this
+    real(dl), intent(in) :: l,p
+    real(dl), dimension(0:this%ord,this%nDeriv) :: dmap
+
+    print*,"Warning, double infinite rational transform not tested"
+    this%len = l; this%pow = p
+    ! First compute y^(n)(x)
+    dmap(:,1) = l*(1._dl+(p-1.)*this%xGrid(:)**2)/(1._dl-this%xGrid(:)**2)**(0.5*p+1)
+    dmap(:,2) = l*this%xGrid(:)*p*(3.+(p-1.)*this%xGrid(:)**2)/(1._dl-this%xGrid(:)**2)**(0.5*p+2)
+    ! Now covert to x^(n)(y)
+    ! TO DO: replace two lines below with this call
+    ! call transform_derivatives_forward_to_backward(dmap(:,1:2))
+    dmap(:,1) = 1._dl/dmap(:,1)
+    dmap(:,2) = -dmap(:,2)*dmap(:,1)**3
+    this%xGrid(:) = l*this%xGrid(:) / (1._dl-this%xGrid(:)**2)**(0.5*p)
+    call transform_derivatives(this,dmap)
+  end subroutine transform_double_infinite_rational
+
+  subroutine transform_ir_stretch(this,s)
+    type(Chebyshev), intent(inout) :: this
+    real(dl), intent(in) :: s
+    real(dl), dimension(0:this%ord,this%nDeriv) :: dmap
+    !this%s = s  ! needed if I want to resample
+
+    print*,"Warning, this is unfinished and untested"
+    dmap(:,1) = cosh(s*this%xGrid(:))
+    dmap(:,2) = s*sinh(s*this%xGrid(:))
+    dmap(:,1) = 1./dmap(:,1)
+    dmap(:,2) = -dmap(:,2)*dmap(:,1)**3
+    this%xGrid(:) = sinh(s*this%xGrid(:))/s
+
+    call transform_derivatives(this,dmap)
+  end subroutine transform_ir_stretch
+  
   !>@brief
   !> Cluster collocation points near a boundary layer using the coordinate mapping
   !>  \f[
@@ -750,8 +946,9 @@ contains
     real(dl) :: winv, x0, s, sinv
     real(dl), allocatable :: xshift(:), dmap(:,:)
 
+#ifdef PRINT_WARNINGS
     print*,"Point clustering not yet fully tested"
-
+#endif
     this%scl = w
     allocate( xshift(0:this%ord) ); allocate( dmap(0:this%ord,1:this%nDeriv) )
     winv = 1._dl / w
@@ -782,14 +979,13 @@ contains
     call transform_derivatives(this,dmap)
     deallocate(xshift); deallocate(dmap)
   end subroutine cluster_points
-
+  
   !>@brief
-  !> Given the derivatives of the mapping parameter, make the appropriate transformations of the
-  !> derivative matrices
-  !>
   !> Given the derivatives of a coordinate mapping to a new set of coordinates for our spatial grid,
-  !> this subroutine will make the appropriate transformations of the derivative operators so that
-  !> that act in the new coordinate system.
+  !> \f[
+  !>    y = y(x)
+  !> \f]
+  !> this subroutine will make the appropriate transformations of the derivative operators so that they act in the new coordinate system.
   !> The appropriate transformations follow from the chain rule, with the first few given by
   !>  \f{align}{
   !>    \frac{df}{dy} &= \frac{dx}{dy}\frac{df}{dx} \\
@@ -810,7 +1006,7 @@ contains
   !>  \f]
   !>
   !>@param[in,out] this
-  !>@param[in]  dmap  An array storing the derivatives up to the maximal derivative order in this
+  !>@param[in]  dmap  An array storing the derivatives up to the maximal derivative order in this.  These are dx^n/dy^2, where y is the new coordinate and x the old coordinate.
   !>
   !>@todo
   !>@arg Extend to higher than second order derivatives
@@ -847,8 +1043,28 @@ contains
        this%derivs(:,:,j) = matmul(this%derivs(:,:,j),this%fTrans(:,:))
     enddo
     this%weights = this%weights / dmap(:,1)
+    this%w_quad = this%w_quad / dmap(:,1)
   end subroutine transform_derivatives
 
+  !>@brief
+  !> Given the derivatives of the forward transform \f$y(x)\f$
+  !> i.e.
+  !>  \f[
+  !>    \frac{dy}{dx} \qquad \frac{d^2y}{dx^2} \qquad \dots
+  !>  \f]
+  !> convert these to derivatives of the backward transform
+  !> i.e.
+  !> \f[
+  !>   \frac{dx}{dy} \qquad \frac{d^2x}{dy^2} \qquad \dots
+  subroutine transform_derivatives_forward_to_backward(this,dmap)
+    type(Chebyshev), intent(inout) :: this
+    real(dl), dimension(0:this%ord,1:2), intent(inout) :: dmap
+
+    print*,"Derivative transforming not yet tested fully"
+    dmap(:,1) = 1._dl/dmap(:,1)
+    dmap(:,2) = -dmap(:,2)*dmap(:,1)**3
+  end subroutine transform_derivatives_forward_to_backward
+  
   !>@brief
   !> Given the coordinate mapping between two coordinate systems at the given sets of collocation points,
   !> compute the derivatives between the mappings using numerical differentiation.

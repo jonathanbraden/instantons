@@ -10,29 +10,44 @@
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 ! Preprocessors for inlining.  Could also move this to another file
-#define POTENTIAL(f) ( cos(f) + del*sin(f)**2 + 1._dl )
-#define VPRIME(f) ( -sin(f) + del*sin(2._dl*f) )
-#define VDPRIME(f) ( -cos(f) + 2._dl*del*cos(2._dl*f) )
+#define POTENTIAL(f) ( 0.25_dl*(f**2-1._dl)**2 + del*(f**3/3._dl-f-2._dl/3._dl) )
+#define VPRIME(f) ( (f+del)*(f**2-1._dl) )
+#define VDPRIME(f) ( 3._dl*f**2 - 1._dl + 2._dl*del*f )
+
+!#define POTENTIAL(f) ( 0.125_dl*(f**2-1._dl)**2 + 0.5_dl*del*(f-1._dl) )
+!#define VPRIME(f) ( 0.5_dl*f*(f**2-1._dl) + 0.5_dl*del )
+!#define VDPRIME(f) ( 1.5_dl*f**2-0.5_dl )
 
 module Model
   use constants
   use Cheby
   implicit none
-  private :: del
+  private :: ndim, del, i_
   
-  real(dl) :: del
+  real(dl) :: del, ndim
+  integer, parameter :: nPar = 1
+  
+  integer :: i_
+  integer, parameter :: nEps = 160
+  real(dl), parameter :: eps_min=0._dl, eps_max=1._dl
+  real(dl), parameter :: log_a_min = -9._dl, log_a_max = 7._dl
+  real(dl), parameter, dimension(nEps) :: aVals = 10.**(/ (log_a_min+(i_-1)*(log_a_max-log_a_min)/dble(nEps), i_=nEps,1,-1) /)
+  real(dl), parameter, dimension(nEps) :: scanVals = 1._dl/(1._dl+aVals)
 
+  integer, parameter :: p_guess = 2 ! Using 3 gives a weird nonconvergence at delta=0.11
+  integer, parameter :: p_guess_2 = 1
+  
 contains
 
   subroutine set_model_params(params,dim)
-    real(dl), dimension(1), intent(in) :: params
-    integer, intent(in) :: dim
-    del = params(1)
+    real(dl), dimension(1:nPar), intent(in) :: params
+    real(dl), intent(in) :: dim
+    del = params(1); ndim = dim
   end subroutine set_model_params
   
   subroutine get_minima(phif,phit)
     real(dl), intent(out) :: phif, phit
-    phif = 0._dl; phit = pi
+    phif = -1._dl; phit = 1._dl
   end subroutine get_minima
   
   elemental function potential(phi)
@@ -53,6 +68,90 @@ contains
     vdprime =  VDPRIME(phi)
   end function vdprime
 
+  real(dl) function m2eff_max(params) result(m2)
+    real(dl), dimension(1:nPar), intent(in), optional :: params
+
+    m2 = -1._dl + del**2
+    if (present(params)) m2 = -1._dl + params(1)**2
+  end function m2eff_max
+
+  real(dl) function m2eff_fv(params) result(m2)
+    real(dl), dimension(1:nPar), intent(in), optional :: params
+
+    m2 = 2._dl*(1._dl+del)
+    if (present(params)) m2 = 2._dl*(1._dl+params(1)) 
+  end function m2eff_fv
+
+  real(dl) function phi_max(params) result(phi)
+    real(dl), dimension(1:nPar), intent(in), optional :: params
+
+    phi = -del
+    if (present(params)) phi = -params(1)
+  end function phi_max
+
+!!!!
+!!!! TO DO : This must be implemented
+!!!!
+  real(dl) function phi_out(params) result(phi)
+    real(dl), dimension(1:nPar), intent(in), optional :: params
+
+    phi = 0._dl
+  end function phi_out
+  
+  function get_profile_type(params,dim) result(p)
+    real(dl), dimension(1:nPar), intent(in) :: params
+    real(dl), intent(in) :: dim
+    integer :: p
+
+    real(dl) :: r0, meff
+    call bubble_parameters_nd_(params(1),dim,r0,meff)
+    if (r0 > 100.) then
+       p = 2
+    else
+       p = 1
+    endif
+  end function get_profile_type
+  
+  subroutine get_guess_params(params,dim,params_ic,prof_type)
+    real(dl), dimension(1:nPar), intent(in) :: params
+    real(dl), intent(in) :: dim
+    real(dl), dimension(1:4), intent(out) :: params_ic
+    integer, intent(out), optional :: prof_type  ! Remove optional nature
+    real(dl) :: delta, n_dim
+
+    n_dim = dim; delta = params(1)
+    call bubble_parameters_nd_(delta,n_dim,params_ic(1),params_ic(2))
+    call get_minima(params_ic(3),params_ic(4))
+    if (present(prof_type)) then
+       prof_type = p_guess
+       if (params_ic(2)*params_ic(1) < 10._dl) prof_type = p_guess_2
+    endif
+  end subroutine get_guess_params
+  
+  subroutine get_grid_params(params,dim,len,scl)
+    real(dl), dimension(1:nPar), intent(in) :: params
+    real(dl), intent(in) :: dim
+    real(dl), intent(out) :: len, scl
+    real(dl) :: meff_max, r0
+    real(dl) :: rad_scl
+    real(dl), parameter :: wscl = 5.8_dl*3.**0.5  ! Seems improved for even grid.  May need to adjust for half infinite grid (the 3.**0.5 for sure)
+
+    rad_scl = sqrt(3._dl) 
+    call bubble_parameters_nd_(params(1),dim,r0,meff_max)
+    len = r0*rad_scl; scl = wscl / (meff_max*len)
+    if (meff_max*r0 < 1._dl) then
+       len = rad_scl/meff_max
+       scl = 1._dl
+    endif
+  end subroutine get_grid_params
+
+  logical function use_previous(params,dim) result(prev)
+    real(dl), intent(in) :: params(1:nPar), dim
+    real(dl) :: r0, meff
+    call bubble_parameters_nd_(params(1),dim,r0,meff)
+    prev = (r0*meff < 5.)
+  end function use_previous
+  
   !>@brief
   !> Given specified radius and width of a bubble profile, adjust grid mapping parameters.
   !>
@@ -61,7 +160,7 @@ contains
   subroutine grid_params_(w,len,r0,w0)
     real(dl), intent(out) :: w, len
     real(dl), intent(in) :: r0, w0
-    real(dl), parameter :: wscl = 6.3_dl   ! TWEAK THIS!!!!!
+    real(dl), parameter :: wscl = 8.96_dl   ! decent for cubic, need to tweak delta -> 1 part
     
     len = r0*3._dl**0.5
     w = wscl * w0 / r0
@@ -71,13 +170,14 @@ contains
     endif
   end subroutine grid_params_
   
+  ! These need to be adjusted for very model.  Might be worth moving it
   ! Change delta to parameters for the model
   subroutine bubble_parameters_nd_(delta,dim,r0,meff)
     real(dl), intent(in) :: delta, dim
     real(dl), intent(out) :: r0, meff
 
-    meff = sqrt(2._dl*delta)!*(1._dl-0.25*dl**2/delta**2)**0.5
-    r0 = dim * sqrt(2._dl*delta)
+    meff = sqrt(1._dl - delta**2) ! effective mass at maximum
+    r0 = dim / (sqrt(2._dl)*delta)
   end subroutine bubble_parameters_nd_
 
   !>@brief
@@ -85,7 +185,7 @@ contains
   elemental function potential_tw(phi)
     real(dl) :: potential_tw
     real(dl), intent(in) :: phi
-    potential_tw = del*sin(phi)**2
+    potential_tw = 0.25_dl*(phi**2-1._dl)**2
   end function potential_tw
 
   !>@brief

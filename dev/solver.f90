@@ -31,7 +31,7 @@ module Nonlinear_Solver
   end type Solver_Storage
   
   type Solver
-     integer :: nVar, u
+     integer :: nVar, u, fNum_summary
      real(dl) :: alpha
      integer :: maxIter; real(dl) :: kick_param  ! Adjustable solver parameters
      real(dl), dimension(:,:), allocatable :: L, L_const  ! Linear operator
@@ -45,6 +45,11 @@ module Nonlinear_Solver
      type(Solver_Storage) :: mat_store
 #endif
      logical :: exists = .false.
+     logical :: output_result, output_iterations
+     real(dl) :: tol_dphi, tol_eom, tol_action
+
+     logical :: use_pre = .false.
+     real(dl), dimension(:,:), allocatable :: precond
   end type Solver
 
 !  abstract interface
@@ -77,8 +82,17 @@ contains
 #ifdef DEBUG_SOLVER
     call create_solver_storage(this%mat_store,n)  ! Need to delete this as needed
 #endif
-    open(unit=newunit(this%u),file='solver-output.dat')
     this%exists = .true.
+
+    ! Need to pass in options for the rest of these
+    open(unit=newunit(this%u),file='solver-output.dat')
+    open(unit=newunit(this%fNum_summary),file='solver-summary.dat')
+    this%output_result = .true.
+    this%output_iterations = .true.
+    this%tol_dphi = 1.e-10; this%tol_eom = 1.e-10; this%tol_action = 1.e-10
+
+    if (this%use_pre) allocate(this%precond(1:n,1:n))
+    
   end subroutine create_solver
 
   subroutine create_solver_storage(this, n)
@@ -91,15 +105,68 @@ contains
 
   subroutine delete_solver(this)
     type(Solver), intent(inout) :: this
+    logical :: o
+    
     this%nVar = -1
     deallocate(this%L, this%L_const, this%S)
     deallocate(this%del, this%f_prev)
     deallocate(this%ipiv)
     deallocate(this%S_prev)
-    close(this%u)  ! Fix this as needed
+    inquire(opened=o,unit=this%u); if (o) close(this%u) 
+    inquire(opened=o,unit=this%fNum_summary); if (o) close(this%fNum_summary) 
     this%exists = .false.
   end subroutine delete_solver
 
+  !>@brief
+  !> Set the tolerances for the nonlinear solver.
+  !
+  !>@param[in] (optional) tol_global - A global value for all tolerances
+  !>@param[in] (optional) tol_dphi - Tolerance on magnitude of change in solution
+  !>@param[in] (optional) tol_eom  - Tolerance of EOM violation
+  !>@param[in] (optional) tol_action - Tolerance on change in action
+  subroutine set_tolerances(this,tol_global,tol_dphi,tol_eom,tol_action)
+    type(Solver), intent(inout) :: this
+    real(dl), intent(in), optional :: tol_global, tol_dphi, tol_eom, tol_action
+
+    if (present(tol_global)) then
+       this%tol_dphi = tol_global; this%tol_eom = tol_global; this%tol_action = tol_global
+    endif
+    if (present(tol_dphi)) this%tol_dphi = tol_dphi
+    if (present(tol_eom)) this%tol_eom = tol_eom
+    if (present(tol_action)) this%tol_action = tol_action
+  end subroutine set_tolerances
+  
+  !>@brief
+  !> Output information from the nonlinear solver.  This can be useful for debugging, or to assess convergence of our iterations
+  subroutine output_solver(this)!,tPair)
+    type(Solver), intent(in) :: this
+!    type(Chebyshev), intent(in) :: tForm
+    integer :: i
+!    real(dl), dimension(1:size(this%f_prev)) :: f_deriv
+
+!    f_deriv = matmul(tForm%derivs(:,:,1),this%f_prev)
+    do i=1,this%nVar
+      write(this%u,*) this%f_prev(i), this%del(i), this%S(i), this%S_prev(i)!, f_deriv(i)
+    enddo
+    write(this%u,*)
+  end subroutine output_solver
+
+  subroutine output_summary(this)
+    type(Solver), intent(in) :: this
+    write(this%fNum_summary,*) this%alpha, sqrt(sum(this%S**2)), maxval(abs(this%S)), this%S(1), sqrt(sum(this%del**2))
+  end subroutine output_summary
+  
+  !>@brief
+  !> Write a brief summary of the last state of the nonlinear solver to the screen
+  subroutine print_solver(this)
+    type(Solver), intent(in) :: this
+    print*,"RMS violation of the EOM is ",sqrt(sum(this%S**2))
+    print*,"Maximal violation of the EOM is ",maxval(abs(this%S))
+    print*,"RMS change in field is ",sqrt(sum(this%del**2))
+    print*,"Maximum change in field is ",maxval(abs(this%del))
+    print*,"Alpha on previous step is ",this%alpha
+  end subroutine print_solver
+  
   subroutine solve(this,f_cur,test)
     type(Solver), intent(inout) :: this
     real(dl), dimension(:), intent(inout) :: f_cur
@@ -109,12 +176,18 @@ contains
     convg = .false.
     do i=1,this%maxIter
        call line_iteration(this,f_cur)
-!       call output_solver(this)
-!       call print_solver(this)
-       if (stop_solver(this)) then; print*,"Converged in ",i," steps"; convg=.true.; exit; endif
+       if (this%output_iterations) call output_solver(this)
+       if (this%output_iterations) call output_summary(this)
+       if (stop_solver(this)) then
+          if (this%output_result) print*,"Converged in ",i," steps"
+          convg=.true.
+          exit
+       endif
     enddo
-    if (.not.convg) print*,"Failed to converge "
-    call print_solver(this)   
+    if (.not.convg) then
+       print*,"Failed to converge "
+       call print_solver(this)
+    endif
     write(this%u,*) ""
 
     if (present(test)) test = convg
@@ -125,12 +198,77 @@ contains
   function stop_solver(this) result(test)
     type(Solver), intent(in) :: this
     logical :: test
-    real(dl), parameter :: eps = 1.e-10
     
-    test = (maxval(abs(this%S(:))) < eps) .and. (maxval(abs(this%del(:))) < eps)
-!    test = (maxval(abs(this%S(:))) < eps)
+    test = (maxval(abs(this%S(:))) < this%tol_eom) .and. (maxval(abs(this%del(:))) < this%tol_dphi)
+    !test = (maxval(abs(this%S(:))) < this%tol_eom)
   end function stop_solver
 
+  !>@brief
+  !> Nonlinear solver based on a variable step length Newton's method
+  !>
+  !> TODO: Add in the source, and hessian calls somewhere
+  !>       Figure out what to do with b1
+  subroutine line_iteration(this,f_cur)
+    type(Solver), intent(inout) :: this
+    real(dl), dimension(:), intent(inout) :: f_cur
+    integer :: i, info, n
+    real(dl) :: alpha
+    real(dl) :: err_rms, err_max, res
+#ifdef DEBUG_SOLVER
+    real(dl) :: cond_num, mat_norm(1:2)
+    character :: norm
+#endif
+
+    n = this%nVar
+    call variation(f_cur, this%L)
+    call source(f_cur, this%S)
+    
+    res = sqrt(sum(this%S**2))  ! Current residual
+    this%S_prev = this%S
+    ! Compute the required perturbation
+    call DGESV(n,1,this%L,n,this%ipiv,this%S,n,info)
+#ifdef DEBUG_SOLVER
+    !mat_norm = F06RAF('1',n,n,this%L,n, ) ! NAG version of DLANGE
+    mat_norm(1) = DLANGE('1',n,n,this%L,n,this%mat_store%rwork(1:n))
+    mat_norm(2) = DLANGE('I',n,n,this%L,n,this%mat_store%rwork(1:n))
+    call DGECON('1',n,this%L,n,mat_norm,cond_num,this%mat_store%rwork(1:4*n),this%mat_store%iwork(1:n),info)
+    print*,"One-norm condition number of matrix is ", cond_num
+    call DGECON('I',n,this%L,n,mat_norm,cond_num,this%mat_store%rwork(1:4*n),this%mat_store%iwork(1:n),info)
+    print*,"Infinity-norm condition number of matrix is ", cond_num
+    call DGETRF(n,n,this%L,n,this%ipiv,info) ! Get LU factorisation
+    call DGETRS('N',n,1,this%L,n,this%ipiv,this%S,n,info)
+    ! Do eigenvalue decomposition
+
+!    call DGESVX(,'N',n,1,this%L,n,this%lu_factor,n,this%ipiv,'N', , ,this%S,n, ,
+#endif
+
+    this%del = this%S
+    if (info /= 0) then
+       print*,"Error inverting linear matrix in solver, terminating"
+       stop 
+    endif
+
+    alpha = 2._dl
+    do i=1,8
+       alpha = alpha/2._dl
+       this%f_prev = f_cur + alpha*this%del
+       call source(this%f_prev, this%S) 
+       err_max = maxval(abs(this%S))
+       err_rms = sqrt(sum(this%S**2))
+#ifdef DEBUG_SOLVER
+       print*,"RMS error is ",err_rms**2," Residual is ",res**2," alpha is ",alpha
+#endif
+       if (err_rms < res) exit  ! Maybe this isn't the best condition
+    enddo
+#ifdef DEBUG_SOLVER
+    print*,""
+#endif
+    this%f_prev = f_cur            ! Store previous iteration
+    f_cur = f_cur + alpha*this%del  ! Update function
+    call source(f_cur, this%S)  ! This seems redundant with a call above
+    this%alpha = alpha          ! Store violation of the equation of motion
+  end subroutine line_iteration
+  
   !>@brief
   !> Nonlinear solver based on Newton's method, with the extension to consider
   !> variable length paths along the Newton iteration to improve convergence properties.
@@ -166,77 +304,6 @@ contains
     ! 4. Figure out what these modes correspond to
   end subroutine decompose_perturbation
   
-  !>@brief
-  !> Nonlinear solver based on Newton's method, with the extension to consider variable
-  !> distances along the Newton iteration path to ensure the solution is converging
-  !>
-  !> TODO: figure out what to do with the b1 and b0
-  !>       Add in the source, and hessian calls somewhere
-  subroutine line_iteration(this,f_cur)
-    type(Solver), intent(inout) :: this
-    real(dl), dimension(:), intent(inout) :: f_cur
-    integer :: i, info, n
-    real(dl) :: alpha
-    real(dl) :: err_rms, err_max, res
-    real(dl) :: b1  ! remove this later
-#ifdef DEBUG_SOLVER
-    real(dl) :: cond_num, mat_norm(1:2)
-    character :: norm
-#endif
-
-    n = this%nVar
-    
-    call variation(f_cur, this%L)
-    call source(f_cur, this%S)
-    
-    res = sqrt(sum(this%S**2))  ! Current residual
-    this%S_prev = this%S
-    ! Compute the required perturbation
-    call DGESV(n,1,this%L,n,this%ipiv,this%S,n,info)
-#ifdef DEBUG_SOLVER
-    !mat_norm = F06RAF('1',n,n,this%L,n, ) ! NAG version of DLANGE
-    mat_norm(1) = DLANGE('1',n,n,this%L,n,this%mat_store%rwork(1:n))
-    mat_norm(2) = DLANGE('I',n,n,this%L,n,this%mat_store%rwork(1:n))
-    call DGECON('1',n,this%L,n,mat_norm,cond_num,this%mat_store%rwork(1:4*n),this%mat_store%iwork(1:n),info)
-    print*,"One-norm condition number of matrix is ", cond_num
-    call DGECON('I',n,this%L,n,mat_norm,cond_num,this%mat_store%rwork(1:4*n),this%mat_store%iwork(1:n),info)
-    print*,"Infinity-norm condition number of matrix is ", cond_num
-    call DGETRF(n,n,this%L,n,this%ipiv,info) ! Get LU factorisation
-    call DGETRS('N',n,1,this%L,n,this%ipiv,this%S,n,info)
-    ! Do eigenvalue decomposition
-
-!    call DGESVX(,'N',n,1,this%L,n,this%lu_factor,n,this%ipiv,'N', , ,this%S,n, ,
-#endif
-
-    this%del = this%S
-    if (info /= 0) then
-       print*,"Error inverting linear matrix in solver"
-       stop  ! Improve this error handling
-    endif
-
-    ! Why am I ever setting this thing here?
-    b1 = res + this%kick_param ! If we're not converging, this allows us to kick ourselves
-    alpha = 2._dl
-    do i=1,8
-       alpha = alpha/2._dl
-       this%f_prev = f_cur + alpha*this%del
-       call source(this%f_prev, this%S) 
-       err_max = maxval(abs(this%S))
-       err_rms = sqrt(sum(this%S**2))
-#ifdef DEBUG_SOLVER
-       print*,"RMS error is ",err_rms**2," Residual is ",res**2," alpha is ",alpha
-#endif
-       if (err_rms < res) exit
-    enddo
-#ifdef DEBUG_SOLVER
-    print*,""
-#endif
-    this%f_prev = f_cur            ! Store previous iteration
-    f_cur = f_cur + alpha*this%del  ! Update function
-    call source(f_cur, this%S)
-    this%alpha = alpha          ! Store violation of the equation of motion
-  end subroutine line_iteration
-
   !>@brief
   !> Look for solutions using combined Newton and gradient descent method
   !> This will presumably be more robust, although somewhat slower.
@@ -279,32 +346,5 @@ contains
     type(Solver), intent(in) :: this
     real(dl), dimension(:), intent(inout) :: f_cur
   end subroutine conjugate_gradient
-
-  !>@brief
-  !> Output information from the nonlinear solver.  This can be useful for debugging, or to assess
-  !> convergence of our iterator
-  subroutine output_solver(this,tForm)
-    type(Solver), intent(in) :: this
-    type(Chebyshev), intent(in) :: tForm
-    integer :: i
-    real(dl), dimension(:), allocatable :: f_deriv
-
-    allocate(f_deriv(1:size(this%f_prev)))
-    !    f_deriv = matmul(transform%derivs(:,:,1),this%f_prev)
-    f_deriv = matmul(tForm%derivs(:,:,1),this%f_prev)
-    do i=1,this%nVar
-      write(this%u,*) this%f_prev(i), this%del(i), this%S(i), this%S_prev(i), f_deriv(i)
-    enddo
-    write(this%u,*)
-  end subroutine output_solver
-
-  !>@brief
-  !> Write a brief summary of the last state of the nonlinear solver to the screen
-  subroutine print_solver(this)
-    type(Solver), intent(in) :: this
-
-    print*,"RMS violation of the EOM is ",sqrt(sum(this%S**2))
-    print*,"Alpha on previous step is ",this%alpha
-  end subroutine print_solver
 
 end module Nonlinear_Solver
