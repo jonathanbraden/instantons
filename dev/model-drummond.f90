@@ -18,15 +18,23 @@ module Model
   use constants
   use Cheby
   implicit none
-  private :: del
-  
-  real(dl) :: del
+  private :: del, i_
 
+  integer, parameter :: nPar=1
+  real(dl) :: del
+  
+  real(dl), parameter :: del_min = 0.5_dl
+  integer :: i_
+  integer, parameter :: nPar_ = 200
+  real(dl), parameter :: log_del_min = -15._dl, log_del_max = 10._dl
+  real(dl), parameter :: scanVals(1:nPar_) = del_min +  10.**([ (log_del_min+(log_del_max-log_del_min)*(i_-1)/dble(nPar_), i_=nPar_,1,-1) ] )
+  integer, parameter :: p_guess = 3  ! Check this
+  
 contains
 
   subroutine set_model_params(params,dim)
     real(dl), dimension(1), intent(in) :: params
-    integer, intent(in) :: dim
+    real(dl), intent(in) :: dim
     del = params(1)
   end subroutine set_model_params
   
@@ -53,6 +61,60 @@ contains
     vdprime =  VDPRIME(phi)
   end function vdprime
 
+  subroutine get_grid_params(params,dim,len,scl)
+    real(dl), dimension(1), intent(in) :: params
+    real(dl), intent(in) :: dim
+    real(dl), intent(out) :: len, scl
+
+    real(dl), parameter :: wscl = 6.3*1.74
+    real(dl) :: meff_max, r0, w0, delta, rad_fac
+
+    delta = params(1); rad_fac = sqrt(3._dl)
+    call bubble_parameters_nd_(delta,1._dl*dim,r0,meff_max)
+    len = r0*rad_fac  ! Fix this for semi-infinite grid, when there's no
+    w0 = 1._dl/meff_max
+    scl = wscl * (w0/len) ! Change to (w0/len) and adjust wscl
+    if (w0 > r0) then
+       len = rad_fac*w0
+       scl = 1._dl
+    endif
+  end subroutine get_grid_params
+
+  subroutine get_guess_params(params,dim,params_ic,prof_type)
+    real(dl), dimension(1:nPar), intent(in) :: params
+    real(dl), intent(in) :: dim
+    real(dl), dimension(1:4), intent(out) :: params_ic
+    integer, intent(out), optional :: prof_type
+
+    real(dl) :: delta, n_dim
+    delta = params(1); n_dim = dim
+    call bubble_parameters_nd_(delta,n_dim,params_ic(1),params_ic(2))
+    call get_minima(params_ic(3),params_ic(4))
+    if (present(prof_type)) then
+       prof_type = p_guess
+       !if (params_ic(2)*params_ic(1) < 10._dl) prof_type = 1
+    endif
+  end subroutine get_guess_params
+
+  logical function use_previous(params,dim) result(prev)
+    real(dl), intent(in) :: params(1:nPar), dim
+    real(dl) :: r0, meff
+    call bubble_parameters_nd_(params(1),dim,r0,meff)
+    prev = (r0*meff < 2.)
+  end function use_previous
+  
+  subroutine get_profile_params(params,dim,prof_type,p_params)
+    real(dl), dimension(1:nPar), intent(in) :: params
+    real(dl), intent(in) :: dim
+    integer, intent(out) :: prof_type
+    real(dl), dimension(1:4), intent(out) :: p_params
+    real(dl) :: phi_inf, phi_out
+
+    call get_minima(p_params(1),p_params(2))
+    call bubble_parameters_nd_(params(1),dim,p_params(3),p_params(4))
+    prof_type = 1
+  end subroutine get_profile_params
+  
   !>@brief
   !> Given specified radius and width of a bubble profile, adjust grid mapping parameters.
   !>
@@ -61,10 +123,10 @@ contains
   subroutine grid_params_(w,len,r0,w0)
     real(dl), intent(out) :: w, len
     real(dl), intent(in) :: r0, w0
-    real(dl), parameter :: wscl = 6.3_dl   ! TWEAK THIS!!!!!
+    real(dl), parameter :: wscl = 6.3_dl   ! TWEAK THIS!!!!! ! was 6.3
     
     len = r0*3._dl**0.5
-    w = wscl * w0 / r0
+    w = wscl * (w0 / r0)
     if (w0 > r0) then
        len = 3._dl**0.5*w0
        w = 1._dl
