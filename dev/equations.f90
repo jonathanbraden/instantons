@@ -30,9 +30,9 @@ contains
   subroutine initialise_equations(tForm, params, dim, bc_)
     type(Chebyshev), intent(in) :: tForm
     real(dl), dimension(:), intent(in) :: params
-    integer, intent(in) :: dim
+    real(dl), intent(in) :: dim
     logical, dimension(1:2), intent(in), optional :: bc_
-    integer :: i, sz
+    integer :: i, sz, imin
 
     ! This line is awful, set it somewhere else
     ! call set_model_params(params,dim)  Moved into compute_profile_
@@ -43,10 +43,13 @@ contains
     bc = .false.; if (present(bc_)) bc = bc_
 
     ! Bad if this contains the origin  !!! FIX IT
-    do i=0,sz-1
-       L0(i+1,:) = tForm%derivs(i,:,2) + dble(dim)*tForm%derivs(i,:,1)/tForm%xGrid(i)
+    imin = 0; if (bc_(1)) imin=1
+    do i=imin,sz-1
+       L0(i+1,:) = tForm%derivs(i,:,2) + dim*tForm%derivs(i,:,1)/tForm%xGrid(i)
     enddo
     neumann(:) = tForm%derivs(0,:,1)
+    if (bc_(1)) L0(1,:) = neumann(:)
+    if (bc_(2)) then; L0(sz,:) = 0._dl; L0(sz,sz) = 1._dl; endif
   end subroutine initialise_equations
 
   subroutine source(fld,src)

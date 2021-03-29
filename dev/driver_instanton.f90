@@ -33,13 +33,21 @@ program Instanton_Solver
   complex(dl), parameter :: iImag = (0._dl,1._dl)
 
   integer, dimension(1) :: i1
-  
-  call create_instanton(inst,100,1.)
-!  call compute_profile_new(inst,(/0.20076/),out=.true.,grid_type='FULL_MID')
-!  print*,compute_action(inst)
-  
-  call scan_profiles(scanVals,1.,100,get_grid_params,get_guess_params,use_previous,out=.true.)
 
+  ! Only for log-potential, comment if not using it
+!  real(dl), dimension(1:nEps+nEPS_r) :: epsScan
+!  epsScan(1:nEps) = scanVals(:); epsScan(nEps+1:nEps+nEps_r) = scanVals_r(:)
+  
+!  call create_instanton(inst,100,3.)
+!  call compute_profile_(inst,(/ 0.5 /),out=.true.,p_i=5)
+!  call compute_profile(inst,(/1.+10./),get_grid_params,get_guess_params,grid_type='FULL_MID',out=.true.)
+!  print*,compute_action(inst)
+
+  call scan_dimensions('bec-norm',100,scanVals, get_grid_params, get_guess_params, use_previous)
+!  call scan_profiles(epsScan,2.,100,get_grid_params,get_guess_params,use_previous,out=.true.)
+!  call scan_profiles(scanVals,2.,100,get_grid_params,get_guess_params,use_previous,out=.true.)
+!  call scan_profiles_(scanVals,1.,100,.true.,p_guess)
+  
 !  call compute_profile_(inst,(/ 2./10._dl**2 /), out=.true.,p_i=3) ! Drummond new normalisation
 !  call compute_profile_(inst,(/ 0.5*1.2_dl**2 /),out=.true.,p_i=3) ! Drummond old normalisation
 !  call compute_profile_(inst,(/0.001/),out=.true.,p_i=2)    ! Cubic double well
@@ -90,7 +98,37 @@ program Instanton_Solver
 !  call scan_eigens(dVals,63,2)
   
 contains
+  !!
+  ! Add the three functions as parameters to pass in
+  !!
+  !>@brief
+  !> Do full scans over parameter values for varying numbers of spatial dimensions.
+  !>
+  !>@param[in] modName (String) - name of model to use to name files
+  !>@param[in] ord (Integer) - Order of interpolating polynomials
+  !>@param[in] scanParams (real array) - Values of model parameter to scan over
+  subroutine scan_dimensions(modName,ord,scanParams,get_grid,get_ic_params,prev_test)
+    character(*), intent(in) :: modName
+    integer, intent(in) :: ord
+    real(dl), dimension(:), intent(in) :: scanParams
+    procedure(get_grid_params) :: get_grid
+    procedure(get_guess_params) :: get_ic_params
+    procedure(use_previous) :: prev_test
+    
+    integer :: i
+    real(dl) :: dim
+    character(6) :: dimStr; character(3) :: ordStr
 
+    do i=0,30
+       dim = 0.5+i*0.1
+       write(dimStr,'(A1,F3.1,A1)') '-',dim,'d'
+       write(ordStr,'(I3)') ord
+
+       call scan_profiles(scanParams,dim,ord,get_grid,get_ic_params,prev_test,out=.false.)
+       call execute_command_line('mv actions.dat actions-'//trim(adjustl(modName))//trim(adjustl(dimStr))//'-o'//trim(adjustl(ordStr))//'.dat')
+    enddo
+  end subroutine scan_dimensions
+  
   !! TO DO: Put the interface for get_grid_params and get_guess_params somewhere besides the module
   subroutine scan_profiles(deltas,dim,ord,get_grid,get_ic_params,prev_test,grid_type,out)
     real(dl), dimension(:), intent(in) :: deltas
@@ -112,26 +150,29 @@ contains
     integer :: p_i
     real(dl), dimension(0:ord) :: xNew, phi_prev
     character(8) :: grid_
-
+    real(dl) :: phizero
+    
     grid_= 'FULL_MID'; if (present(grid_type)) grid_ = grid_type
     outL = .false.; if (present(out)) outL = out
     open(unit=newunit(fNum),file='actions.dat')
     call create_instanton(inst,ord,dim)
     call create_solver(solv,ord+1,100,0.1_dl)
-    
+
     do i=1,size(deltas)
        dCur = deltas(i)
        call set_model_params((/dCur/),dim)
 
        call get_grid( (/dCur/),dim,len,w )
-       call get_ic_params( (/dCur/),dim,params_ic,p_i)
+       call get_ic_params( (/dCur/),dim,params_ic,p_i )
        ! TO DO: Fix the ugly call to get the new chebyshev grid
-       ! Optional : Don't even both to interpolate solution onto the new grid, then I don't have to do anything
+       ! Optional : Don't even bother to interpolate solution onto the new grid, then I don't have to do anything
+       !
+       ! Problem : The interpolation seems broken for the Drummond potential
        if ( prev_test( (/dCur/),dim) ) then
           xNew = chebyshev_grid(inst%ord,len,w) ! Fix this to allow for different grids
           phi_prev = interpolate_instanton_(inst,xNew)
           call create_instanton_grid(inst,grid_,len,w)
-          inst%phi = phi_prev
+          inst%phi(:) = phi_prev(:)
        else
           call create_instanton_grid(inst,grid_,len,w)
           call profile_guess(inst,params_ic(1),params_ic(2),params_ic(3),params_ic(4),p_i)
@@ -141,13 +182,36 @@ contains
 
        ! Now solve
        call solve(solv,inst%phi)
-       write(fNum,*) dCur, compute_action(inst)
+       write(fNum,*) dCur, compute_action(inst), interpolate_instanton_(inst,(/0._dl/)), inst%phi(0)
        if (outL) call output_instanton(inst)
     enddo
 
     close(fNum); call delete_solver(solv); call destroy_instanton(inst)
   end subroutine scan_profiles
 
+  subroutine scan_resolutions(par,d)
+    real(dl), dimension(:), intent(in) :: par
+    real(dl), intent(in) :: d
+    type(Instanton) :: inst
+    integer :: u1,u2
+    integer :: i,o
+
+    open(unit=newunit(u1),file="actions.dat"); open(unit=newunit(u2),file="profiles.dat")
+    do i=2,200,4
+       !o = 2**i-1
+       o = i
+       call create_instanton(inst,o,d)
+       call compute_profile_(inst,par,out=.false.,p_i=3)
+       write(u1,*) o, compute_action(inst)
+       ! Add interpolation and output of profiles here
+    enddo
+    close(u1); close(u2)
+  end subroutine scan_resolutions
+  
+!  subroutine scan_grid_params(inst,ic_params)
+!    type(Instanton), intent(inout) :: inst
+!    procedure(get_ic_params) :: ic_params
+!  end subroutine scan_grid_params
 
   !
   ! This is old, I can probably delete it
@@ -185,14 +249,12 @@ contains
        dCur = deltas(i)
        if ( prev_test(inst) ) then
        !if ( prev_test_dw(inst) ) then
-          call bubble_parameters_nd_(dCur,dim*1._dl,r0,meff); call grid_params_(w,len,r0,1._dl/meff)
+          call bubble_parameters_nd_(dCur,dim*1._dl,r0,meff); call grid_params_(w,len,r0,1._dl/meff)  ! Remove this nastiness
           call get_grid_params((/dCur/),dim,len,w)
           xNew = chebyshev_grid(inst%ord,len,w)
           phi_prev = interpolate_instanton_(inst,xNew)
           call compute_profile_(inst,(/dCur/),phi_prev,out=outL)
        else
-          p_i = get_profile_type((/dCur/),dble(dim))
-          print*,"For ",dCur," using guess ",p_i
           call compute_profile_(inst,(/dCur/),out=outL,p_i=p_i)
        endif
        write(u,*) dCur, compute_action(inst)
@@ -249,25 +311,6 @@ contains
     enddo
   end subroutine scan_eigens
   
-  subroutine scan_resolutions(par,d)
-    real(dl), dimension(:), intent(in) :: par
-    real(dl), intent(in) :: d
-    type(Instanton) :: inst
-    integer :: u1,u2
-    integer :: i,o
-
-    open(unit=newunit(u1),file="actions.dat"); open(unit=newunit(u2),file="profiles.dat")
-    do i=2,200,4
-       !o = 2**i-1
-       o = i
-       call create_instanton(inst,o,d)
-       call compute_profile_(inst,par,out=.false.,p_i=3)
-       write(u1,*) o, compute_action(inst)
-       ! Add interpolation and output of profiles here
-    enddo
-    close(u1); close(u2)
-  end subroutine scan_resolutions
-
   !>@brief
   !> Interpolate the instanton profile onto a uniform grid fo
   !>
@@ -386,19 +429,6 @@ contains
     call compute_profile_(this,(/dCur/),phi_prev,out=outL)  ! fix this
   end subroutine deform_initial_guess
 #endif
-  
-  function prev_test_log(inst) result(prev)
-    type(Instanton), intent(in) :: inst
-    logical :: prev
-
-    prev = .true.  ! Improve this
-  end function prev_test_log
-
-  function prev_test_dw(inst) result(prev)
-    type(Instanton), intent(in) :: inst
-    logical :: prev
-    prev = .false.
-  end function prev_test_dw
   
   function prev_test(inst) result(prev)
     type(Instanton), intent(in) :: inst

@@ -123,6 +123,31 @@ contains
     action(8) = quadrature(this%tForm, this%tForm%xGrid(:)**(d-1)*lag )
   end function compute_action
 
+  
+  !>@brief
+  !> Initialise our initial profile guess based on the given radius and width.
+  !> A choice to use tanh, arctan, breather, Gaussian or generalised witchhat initial profiles are given
+  subroutine profile_guess(this,r0,meff,phif,phit,s)
+    type(Instanton), intent(inout) :: this
+    real(dl), intent(in) :: r0,meff,phif, phit
+    integer, intent(in) :: s ! Select type of profile to use
+    
+    select case (s)
+    case (1)
+       this%phi(:) = breather_p(this%tForm%xGrid(:),r0,meff,phif,phit)
+    case (2)
+       this%phi(:) = tanh_p(this%tForm%xGrid(:),r0,meff,phif,phit)
+    case (3)
+       this%phi(:) = atan_p(this%tForm%xGrid(:),r0,meff,phif,phit)
+    case (4)
+       this%phi(:) = gaussian_p(this%tForm%xGrid(:),r0,meff,phif,phit)
+    case (5)
+       this%phi(:) = witchhat_p(this%tForm%xGrid(:),r0,meff,phif,phit)
+    case default
+       this%phi(:) = breather_p(this%tForm%xGrid(:),r0,meff,phif,phit)
+    end select
+  end subroutine profile_guess
+  
   subroutine compute_profile(this,params,get_grid,get_ic,phi_init,grid_type,out)
     type(Instanton), intent(inout) :: this
     real(dl), dimension(:), intent(in) :: params
@@ -132,15 +157,11 @@ contains
     character(8), intent(in), optional :: grid_type
     logical, intent(in), optional :: out
 
-    type(Solver) :: solv
     character(8) :: grid_; logical :: out_
+    type(Solver) :: solv; integer, parameter :: maxit = 100; real(dl), parameter :: kick = 0.1_dl
     integer :: order, n
-    real(dl) :: dim
-    integer, parameter :: maxit = 100
-    real(dl), parameter :: kick = 0.1_dl
-    real(dl) :: len, w,pow
-    real(dl), dimension(1:4) :: params_ic
-    integer :: prof_type
+    real(dl) :: dim, len, w, pow
+    real(dl), dimension(1:4) :: params_ic; integer :: prof_type
     
     grid_ = 'FULL_MID'; if (present(grid_type)) grid_=grid_type
     out_ = .true.; if (present(out)) out_ = out
@@ -148,6 +169,7 @@ contains
     dim = this%dim; order = this%ord; n = order+1
     call set_model_params(params,dim)
     call get_grid(params,dim,len,w)
+!    call create_instanton_grid(this,grid_,len,w,1.)
     call create_instanton_grid(this,grid_,len,w)
 
     ! Now initialise the fields
@@ -156,14 +178,13 @@ contains
     if (present(phi_init)) then
        this%phi = phi_init
     else
-       call get_guess_params(params,dble(dim),params_ic,prof_type)
-       !call profile_guess(this,params_ic(1),params_ic(2),params_ic(3),params_ic(4),p_loc)
+       call get_ic(params,dim,params_ic,prof_type)
+       call profile_guess(this,params_ic(1),params_ic(2),params_ic(3),params_ic(4),prof_type)
     endif
     
     call create_solver(solv,n,maxit,kick)
     call initialise_equations(this%tForm,params,dim,this%bc)
-    call solve(solv,this%phi)
-    
+    call solve(solv,this%phi)  
     if (out_) call output_instanton(this)
   end subroutine compute_profile
   
@@ -202,7 +223,7 @@ contains
     else
        call get_grid_params(params,dim,len,w)
     endif
-!    call create_instanton_grid(this,'FULL_RHT',len,w)
+    print*,"grid params ",params(1),len,w
     call create_instanton_grid(this,'FULL_MID',len,w)
     ! Better IR behaviour for Fubini (add this functionality to new call)
     !call create_grid_stretch(this%tForm,order,len,20._dl)
@@ -210,11 +231,13 @@ contains
     if (present(phi_init)) then
        this%phi(0:order) = phi_init(0:order)
     else
+       print*,"Making guess"
        call get_guess_params(params,dim,params_ic)
-       !if (p_i==1 .or. p_i==3) params_ic(2) = params_ic(2)*2.**0.5
+       print*,params_ic
        call profile_guess(this,params_ic(1),params_ic(2),params_ic(3),params_ic(4),p_loc)
     endif
 
+    print*,"making solver"
     call create_solver(solv,n,100,0.1_dl)
     call initialise_equations(this%tForm,params,dim,this%bc)
     call solve(solv,this%phi)
@@ -268,15 +291,6 @@ contains
           call transform_double_infinite(this%tForm,len)
           this%grid_type = 'FULL_MID'
        endif
-
-    case ('FULL_END') ! Lobatto grid with even rationals on double infinite
-       print*,"Warning, using even rational Chebyshev's on double infinite interval leads to a degenerate problem when explicitly imposing neumann BCs"
-       this%bc = (/.true.,.true./)  ! Check this
-       call create_chebyshev_full(this%tForm,this%ord,n_deriv,'ENDS',num_inv)
-       call transform_to_evens(this%tForm)
-       call cluster_points(this%tForm,w,.true.) 
-       call transform_double_infinite(this%tForm,len)
-       this%grid_type = 'FULL_END'
        
     case ('FULL_RHT') ! Radau grid with even rationals on double infinite
        this%bc = (/.false.,.true./) 
@@ -368,92 +382,6 @@ contains
     call transform_to_evens(tForm)
     call transform_double_infinite_rational(tForm,l,p)
   end subroutine create_grid_stretch
-  
-  !>@brief
-  !> Initialise our initial profile guess based on the given radius and width.
-  !> A choice to use tanh, arctan, breather, Gaussian or generalised witchhat initial profiles are given
-  subroutine profile_guess(this,r0,meff,phif,phit,s)
-    type(Instanton), intent(inout) :: this
-    real(dl), intent(in) :: r0,meff,phif, phit
-    integer, intent(in) :: s ! Select type of profile to use
-    
-    select case (s)
-    case (1)
-       this%phi(:) = breather_p(this%tForm%xGrid(:),r0,meff,phif,phit)
-    case (2)
-       this%phi(:) = tanh_p(this%tForm%xGrid(:),r0,meff,phif,phit)
-    case (3)
-       this%phi(:) = atan_p(this%tForm%xGrid(:),r0,meff,phif,phit)
-    case (4)
-       this%phi(:) = gaussian_p(this%tForm%xGrid(:),r0,meff,phif,phit)
-    case (5)
-       this%phi(:) = witchhat_p(this%tForm%xGrid(:),r0,meff,phif,phit)
-    case default
-       this%phi(:) = breather_p(this%tForm%xGrid(:),r0,meff,phif,phit)
-    end select
-  end subroutine profile_guess
-
-  elemental function breather_p(x,r0,m,phif,phit) result(f)
-    real(dl), intent(in) :: x
-    real(dl), intent(in) :: r0,m,phif,phit
-    real(dl) :: f
-    f = (phif-phit)*(2._dl/pi)*atan(-0.5_dl*exp(m*r0)/cosh(m*x)) + phif
-  end function breather_p
-
-  elemental function tanh_p(x,r0,m,phif,phit) result(f)
-    real(dl), intent(in) :: x
-    real(dl), intent(in) :: r0,m,phif,phit
-    real(dl)  :: f
-    f = 0.5_dl*(phif-phit)*tanh((m/2.**0.5)*(x-r0)) + 0.5_dl*(phit+phif)
-  end function tanh_p
-
-  elemental function atan_p(x,r0,m,phif,phit) result(f)
-    real(dl), intent(in) :: x
-    real(dl), intent(in) :: r0,m,phif,phit
-    real(dl) :: f
-
-!    real(dl) :: mscl
-!    mscl = 1.5_dl*m
-    f = (phif-phit)*(2._dl/pi)*atan(exp(m*(x-r0))) + phit
-  end function atan_p
-
-  elemental function gaussian_p(x,r0,m,phif,phit) result(f)
-    real(dl), intent(in) :: x
-    real(dl), intent(in) :: r0,m,phif,phit
-    real(dl) :: f
-    f = (phit-phif)*exp(-(m*x)**2) + phif
-  end function gaussian_p
-
-  elemental function witchhat_p(x,pow,m,phif,phit) result(f)
-    real(dl), intent(in) :: x
-    real(dl), intent(in) :: pow,m
-    real(dl), intent(in) :: phif,phit
-    real(dl) :: f
-    f = (phit-phif)/(1.+m*x**2/pow)**pow + phif
-  end function witchhat_p
-    
-  subroutine breather_profile(x,f,r0,m,phif,phit)
-    real(dl), dimension(:), intent(in) :: x
-    real(dl), dimension(1:size(x)), intent(out) :: f
-    real(dl), intent(in) :: r0,m,phif,phit
-    f(:) =  (phif-phit)*(2._dl/pi)*atan(-0.5_dl*exp(m*r0)/cosh(m*x)) + phif
-  end subroutine breather_profile
-
-  subroutine tanh_profile(x,f,r0,m,phif,phit)
-    real(dl), dimension(:), intent(in) :: x
-    real(dl), dimension(:), intent(out) :: f
-    real(dl), intent(in) :: r0,m,phif,phit
-
-    f(:) = 0.5_dl*(phif-phit)*tanh((m/2.**0.5)*(x(:)-r0)) + 0.5_dl*(phit+phif)
-  end subroutine tanh_profile
-
-  subroutine atan_profile(x,f,r0,m,phif,phit)
-    real(dl), dimension(:), intent(in) :: x
-    real(dl), intent(in) :: r0,m,phif,phit
-    real(dl), dimension(1:size(x)), intent(out) :: f
-
-    f(:) = (phif-phit)*(2._dl/pi)*atan(exp(0.5_dl*pi*m*(x(:)-r0))) + phit
-  end subroutine atan_profile
 
   !>@brief
   !> Use Newton method to find FV minimum.
@@ -496,5 +424,67 @@ contains
        i = i+1  ! Add error checking on max number of iterations
     enddo
   end subroutine solve_for_phi_out
+
+  elemental function breather_p(x,r0,m,phif,phit) result(f)
+    real(dl), intent(in) :: x
+    real(dl), intent(in) :: r0,m,phif,phit
+    real(dl) :: f
+    f = (phif-phit)*(2._dl/pi)*atan(-0.5_dl*exp(m*r0)/cosh(m*x)) + phif
+  end function breather_p
+
+  elemental function tanh_p(x,r0,m,phif,phit) result(f)
+    real(dl), intent(in) :: x
+    real(dl), intent(in) :: r0,m,phif,phit
+    real(dl)  :: f
+    f = 0.5_dl*(phif-phit)*tanh((m/2.**0.5)*(x-r0)) + 0.5_dl*(phit+phif)
+  end function tanh_p
+
+  elemental function atan_p(x,r0,m,phif,phit) result(f)
+    real(dl), intent(in) :: x
+    real(dl), intent(in) :: r0,m,phif,phit
+    real(dl) :: f
+
+!    real(dl) :: mscl
+!    mscl = 1.5_dl*m
+    f = (phif-phit)*(2._dl/pi)*atan(exp(m*(x-r0))) + phit
+  end function atan_p
+
+  elemental function gaussian_p(x,r0,m,phif,phit) result(f)
+    real(dl), intent(in) :: x
+    real(dl), intent(in) :: r0,m,phif,phit
+    real(dl) :: f
+    f = (phit-phif)*exp(-(m*x)**2) + phif
+  end function gaussian_p
+
+  elemental function witchhat_p(x,pow,m,phif,phit) result(f)
+    real(dl), intent(in) :: x
+    real(dl), intent(in) :: pow,m
+    real(dl), intent(in) :: phif,phit
+    real(dl) :: f
+    f = (phit-phif)/(1.+m**2*x**2/pow)**pow + phif
+  end function witchhat_p
+    
+  subroutine breather_profile(x,f,r0,m,phif,phit)
+    real(dl), dimension(:), intent(in) :: x
+    real(dl), dimension(1:size(x)), intent(out) :: f
+    real(dl), intent(in) :: r0,m,phif,phit
+    f(:) =  (phif-phit)*(2._dl/pi)*atan(-0.5_dl*exp(m*r0)/cosh(m*x)) + phif
+  end subroutine breather_profile
+
+  subroutine tanh_profile(x,f,r0,m,phif,phit)
+    real(dl), dimension(:), intent(in) :: x
+    real(dl), dimension(:), intent(out) :: f
+    real(dl), intent(in) :: r0,m,phif,phit
+
+    f(:) = 0.5_dl*(phif-phit)*tanh((m/2.**0.5)*(x(:)-r0)) + 0.5_dl*(phit+phif)
+  end subroutine tanh_profile
+
+  subroutine atan_profile(x,f,r0,m,phif,phit)
+    real(dl), dimension(:), intent(in) :: x
+    real(dl), intent(in) :: r0,m,phif,phit
+    real(dl), dimension(1:size(x)), intent(out) :: f
+
+    f(:) = (phif-phit)*(2._dl/pi)*atan(exp(0.5_dl*pi*m*(x(:)-r0))) + phit
+  end subroutine atan_profile
   
 end module Instanton_Class
