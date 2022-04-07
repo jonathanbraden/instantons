@@ -42,6 +42,11 @@ contains
     real(dl), intent(in) :: params(1:nPar), dim
     eps = params(1); ndim = dim
   end subroutine set_model_params
+
+  function get_model_params() result(params)
+    real(dl), dimension(1:nPar) :: params
+    params(1) = eps
+  end function get_model_params
   
   subroutine grid_params_(w,len,r0,w0)
     real(dl), intent(out) :: w, len
@@ -128,9 +133,9 @@ contains
 
     real(dl) :: rad_scl, meff
 
-    rad_scl = sqrt(3._dl)
+    rad_scl = 1._dl  ! sqrt(3._dl)
     meff = meff_max(params)
-    len = 2._dl*1._dl*rad_scl/meff
+    len = rad_scl/meff
     scl = 1._dl
   end subroutine get_grid_params
 

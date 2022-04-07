@@ -14,10 +14,6 @@
 #define VPRIME(f) ( (f+del)*(f**2-1._dl) )
 #define VDPRIME(f) ( 3._dl*f**2 - 1._dl + 2._dl*del*f )
 
-!#define POTENTIAL(f) ( 0.125_dl*(f**2-1._dl)**2 + 0.5_dl*del*(f-1._dl) )
-!#define VPRIME(f) ( 0.5_dl*f*(f**2-1._dl) + 0.5_dl*del )
-!#define VDPRIME(f) ( 1.5_dl*f**2-0.5_dl )
-
 module Model
   use constants
   use Cheby
@@ -44,6 +40,11 @@ contains
     real(dl), intent(in) :: dim
     del = params(1); ndim = dim
   end subroutine set_model_params
+
+  function get_model_params() result(params)
+    real(dl), dimension(1:nPar) :: params
+    params(1) = del
+  end function get_model_params
   
   subroutine get_minima(phif,phit)
     real(dl), intent(out) :: phif, phit
@@ -133,11 +134,11 @@ contains
     real(dl), intent(out) :: len, scl
     real(dl) :: meff_max, r0
     real(dl) :: rad_scl
-    real(dl), parameter :: wscl = 5.8_dl*3.**0.5  ! Seems improved for even grid.  May need to adjust for half infinite grid (the 3.**0.5 for sure)
+    real(dl), parameter :: wscl = 0.5_dl*twopi !5.8_dl !5.8_dl*3.**0.5
 
-    rad_scl = sqrt(3._dl) 
+    rad_scl = 1._dl ! sqrt(3._dl) 
     call bubble_parameters_nd_(params(1),dim,r0,meff_max)
-    len = r0*rad_scl; scl = wscl / (meff_max*len)
+    len = r0*rad_scl; scl = wscl / (meff_max*len) ! *2.**0.5
     if (meff_max*r0 < 1._dl) then
        len = rad_scl/meff_max
        scl = 1._dl
@@ -148,7 +149,7 @@ contains
     real(dl), intent(in) :: params(1:nPar), dim
     real(dl) :: r0, meff
     call bubble_parameters_nd_(params(1),dim,r0,meff)
-    prev = (r0*meff < 5.)
+    prev = (r0*meff < 2.)
   end function use_previous
   
   !>@brief

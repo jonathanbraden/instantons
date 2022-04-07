@@ -10,18 +10,18 @@
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 ! Preprocessors for inlining.  Could also move this to another file
-#define POTENTIAL(f) ( cos(f) + del*sin(f)**2 - 1._dl )
-#define VPRIME(f) ( -sin(f) + del*sin(2._dl*f) )
-#define VDPRIME(f) ( -cos(f) + 2._dl*del*cos(2._dl*f) )
+#define POTENTIAL(f) ( cos(f) + del*sin(f)**2 - 1._dl + 0.5_dl*m2*f**2 + 0.25_dl*lam*f**4 )
+#define VPRIME(f) ( -sin(f) + del*sin(2._dl*f) + m2*f + lam*f**3 )
+#define VDPRIME(f) ( -cos(f) + 2._dl*del*cos(2._dl*f) +m2 + 3._dl*lam*f**2)
 
 module Model
   use constants
   use Cheby
   implicit none
-  private :: del, i_
+  private :: del, m2, lam, i_
 
   integer, parameter :: nPar=1
-  real(dl) :: del
+  real(dl) :: del, m2, lam
   
   real(dl), parameter :: del_min = 0.5_dl
   integer :: i_
@@ -29,19 +29,32 @@ module Model
   real(dl), parameter :: log_del_min = -15._dl, log_del_max = 10._dl
   real(dl), parameter :: scanVals(1:nPar_) = del_min +  10.**([ (log_del_min+(log_del_max-log_del_min)*(i_-1)/dble(nPar_), i_=nPar_,1,-1) ] )
   integer, parameter :: p_guess = 3  ! Check this
+
+  real(dl), parameter :: m2Vals(1:nPar_) = ([ (-(i_-1)*0.42/dble(nPar_), i_=1,nPar_) ])
   
 contains
 
   subroutine set_model_params(params,dim)
-    real(dl), dimension(1), intent(in) :: params
+    real(dl), dimension(1:nPar), intent(in) :: params
     real(dl), intent(in) :: dim
-    del = params(1)
+    del = 0.5_dl*1.2**2
+    m2 = params(1)
+    lam = -m2/(0.5_dl*twopi)**2
   end subroutine set_model_params
 
   function get_model_params() result(params)
     real(dl), dimension(1:nPar) :: params
-    params(1) = del
-  end function get_model_paramsu
+    params(1) = m2
+  end function get_model_params
+
+  subroutine write_model_header(fNum)
+    integer, intent(in) :: fNum
+
+    write(fNum,*) "# Model potential is:"
+    write(fNum,*) "# V(phi) = cos(phi) - 1 + del*sin(phi)**2 + 0.5*m2*phi**2 - 0.25*m2/pi**2*phi**4"
+    write(fNum,*) "#"
+    write(fNum,*) "# del     m2      action variables"
+  end subroutine write_model_header
   
   subroutine get_minima(phif,phit)
     real(dl), intent(out) :: phif, phit
@@ -75,7 +88,7 @@ contains
     real(dl) :: meff_max, r0, w0, delta
     real(dl) :: rad_scl
     
-    delta = params(1); rad_fac = 1._dl !sqrt(3._dl)
+    delta = del; rad_scl = 1._dl !sqrt(3._dl)
     call bubble_parameters_nd_(delta,dim,r0,meff_max)
     len = r0*rad_scl
     w0 = 1._dl/meff_max
@@ -93,12 +106,12 @@ contains
     integer, intent(out), optional :: prof_type
 
     real(dl) :: delta, n_dim
-    delta = params(1); n_dim = dim
+    !    delta = params(1); n_dim = dim
+    delta = del; n_dim = dim
     call bubble_parameters_nd_(delta,n_dim,params_ic(1),params_ic(2))
     call get_minima(params_ic(3),params_ic(4))
     if (present(prof_type)) then
        prof_type = p_guess
-       !if (params_ic(2)*params_ic(1) < 10._dl) prof_type = 1
     endif
   end subroutine get_guess_params
 
@@ -120,25 +133,7 @@ contains
     call bubble_parameters_nd_(params(1),dim,p_params(3),p_params(4))
     prof_type = 1
   end subroutine get_profile_params
-  
-  !>@brief
-  !> Given specified radius and width of a bubble profile, adjust grid mapping parameters.
-  !>
-  !> The relationship between the radius and mapping length are fixed by choice of polynomials
-  !> Should probably be moved into the chebyshev class
-  subroutine grid_params_(w,len,r0,w0)
-    real(dl), intent(out) :: w, len
-    real(dl), intent(in) :: r0, w0
-    real(dl), parameter :: wscl = 6.3_dl   ! TWEAK THIS!!!!! ! was 6.3
     
-    len = r0*3._dl**0.5
-    w = wscl * (w0 / r0)
-    if (w0 > r0) then
-       len = 3._dl**0.5*w0
-       w = 1._dl
-    endif
-  end subroutine grid_params_
-  
   ! Change delta to parameters for the model
   subroutine bubble_parameters_nd_(delta,dim,r0,meff)
     real(dl), intent(in) :: delta, dim
@@ -155,30 +150,5 @@ contains
     real(dl), intent(in) :: phi
     potential_tw = del*sin(phi)**2
   end function potential_tw
-
-  !>@brief
-  !> A subroutine to set general Robin boundary conditions on our fields
-  !>  \f[
-  !>    \alpha_L f(x_L) + \beta_L f'(x_L) = c_L
-  !>  \f]
-  !>  \f[
-  !>    \alpha_R f(x_R) + \beta_R f'(x_R) = c_R
-  !>  \f]
-  subroutine boundaries(L,S,c,bc)
-    real(dl), intent(inout) :: L(1:,1:), S(1:)
-    real(dl), dimension(1:3,1:2), intent(in) :: c
-    logical, dimension(1:2), intent(in) :: bc
-    integer :: sz
-    sz = size(S)
-
-    if (bc(1)) then
-       L(:,:) = c(1,1) + c(2,1)
-       S(1) = c(3,1)
-    endif
-    if (bc(2)) then
-       L(:,:) = c(1,2) + c(2,2)
-       S(sz) = c(3,2)
-    endif
-  end subroutine boundaries
 
 end module Model
