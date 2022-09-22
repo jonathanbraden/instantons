@@ -18,6 +18,13 @@ module Instanton_Class
      logical :: exists = .false.
      integer :: fNum = -1
   end type Instanton
+
+  type GridSpec
+     character(8) :: grid_type
+     real(dl) :: len = 1.
+     real(dl) :: scl = 1.
+     real(dl) :: pow = -1.
+  end type GridSpec
   
 contains
 
@@ -57,6 +64,7 @@ contains
     ! This should all be moved somewhere more modular where it doesn't rely on knowledge of how grid was transformed (I've started doing this)
 
     ! call invert_mapping(this,r_new,xvals)  ! Fix to actual call, add rational mappings
+    ! Best to restructure the Chebyshev module a bit to do this
     w = this%tForm%scl; L = this%tForm%len
     winv = 1._dl/w
     xvals = r_new / sqrt(r_new**2+L**2)
@@ -83,11 +91,12 @@ contains
     real(dl) :: phif
     integer :: u
 
+    sz = size(this%phi)
     u = this%fNum
     inquire(opened=o,file='instanton.dat')
     if (.not.o) open(unit=u,file='instanton.dat')
 
-    sz = size(this%phi); phif = this%phi(sz-1) ! This isn't happy for the log potential, possibly from huge error in calculation of potential at origin.
+    phif = this%phi(sz-1) ! This isn't happy for the log potential, possibly from huge error in calculation of potential at origin.
     
     phi_spec = matmul(this%tForm%fTrans,this%phi) 
     dphi = matmul(this%tForm%derivs(:,:,1),this%phi)
@@ -98,6 +107,18 @@ contains
     write(u,*)    
   end subroutine output_instanton
 
+  !>@brief
+  !> Compute the Euclidean action and several related quantities
+  !
+  !> The output is returned as an 8 component array.  The components are
+  !>  1 - Euclidean action evaluated with Lagrangian
+  !>  2 - Kinetic contribution to the action
+  !>  3 - Potential contribution to the action
+  !>  4 - Surface tension
+  !>  5 - Thin-wall approximation to the action (requires R_wall to be specified)
+  !>  6 - Action from base potential in thin-wall approximation (requires thin-wall potential)
+  !>  7 - Action computed as \int r^d \phi V'
+  !>  8 - Energy of the initial bubble (computed in d dimensions)
   function compute_action(this) result(action)
     type(Instanton), intent(in) :: this
     real(dl), dimension(1:8) :: action
@@ -111,11 +132,12 @@ contains
     r0 = this%r0  ! Fix this in case r0 isn't specified
     
     dfld = matmul(this%tForm%derivs(:,:,1),this%phi)
-    lag = 0.5_dl*dfld**2 + potential(this%phi) - potential(phif)
+    lag = 0.5_dl*dfld**2 + potential(this%phi) ! - potential(phif)
 
     action(1) = quadrature(this%tForm,lag*this%tForm%xGrid(:)**d)
     action(2) = quadrature(this%tForm,0.5_dl*dfld**2*this%tForm%xGrid(:)**d)
-    action(3) = quadrature(this%tForm,(potential(this%phi)-potential(phif))*this%tForm%xGrid(:)**d)
+    !action(3) = quadrature(this%tForm,(potential(this%phi)-potential(phif))*this%tForm%xGrid(:)**d)
+    action(3) = quadrature(this%tForm,potential(this%phi)*this%tForm%xGrid(:)**d)
     action(4) = quadrature(this%tForm,dfld**2)
     action(5) = 0.5_dl*action(4)*r0**d
     action(6) = quadrature(this%tForm,(0.5_dl*dfld**2+potential_tw(this%phi))*this%tForm%xGrid(:)**d)
@@ -123,7 +145,6 @@ contains
     action(8) = quadrature(this%tForm, this%tForm%xGrid(:)**(d-1)*lag )
   end function compute_action
 
-  
   !>@brief
   !> Initialise our initial profile guess based on the given radius and width.
   !> A choice to use tanh, arctan, breather, Gaussian or generalised witchhat initial profiles are given
@@ -131,7 +152,7 @@ contains
     type(Instanton), intent(inout) :: this
     real(dl), intent(in) :: r0,meff,phif, phit
     integer, intent(in) :: s ! Select type of profile to use
-    
+
     select case (s)
     case (1)
        this%phi(:) = breather_p(this%tForm%xGrid(:),r0,meff,phif,phit)
@@ -147,13 +168,14 @@ contains
        this%phi(:) = breather_p(this%tForm%xGrid(:),r0,meff,phif,phit)
     end select
   end subroutine profile_guess
-  
-  subroutine compute_profile(this,params,get_grid,get_ic,phi_init,grid_type,out)
+
+!#ifdef NEW  
+  subroutine compute_profile(this,params,get_grid,get_ic,prev_test,grid_type,out)
     type(Instanton), intent(inout) :: this
     real(dl), dimension(:), intent(in) :: params
     procedure(get_grid_params) :: get_grid
     procedure(get_guess_params) :: get_ic
-    real(dl), intent(in), optional :: phi_init(0:this%ord)
+    procedure(use_previous) :: prev_test
     character(8), intent(in), optional :: grid_type
     logical, intent(in), optional :: out
 
@@ -162,32 +184,53 @@ contains
     integer :: order, n
     real(dl) :: dim, len, w, pow
     real(dl), dimension(1:4) :: params_ic; integer :: prof_type
+    real(dl), dimension(0:this%ord) :: xNew, phi_prev
     
-    grid_ = 'FULL_MID'; if (present(grid_type)) grid_=grid_type
-    out_ = .true.; if (present(out)) out_ = out
+    grid_ = 'FULL_MID'; if (present(grid_type)) grid_ = grid_type
+    out_ = .false.; if (present(out)) out_ = out
     
     dim = this%dim; order = this%ord; n = order+1
     call set_model_params(params,dim)
-    call get_grid(params,dim,len,w)
-!    call create_instanton_grid(this,grid_,len,w,1.)
-    call create_instanton_grid(this,grid_,len,w)
-
-    ! Now initialise the fields
-    ! Clean this up so it isn't so ugly.  Pass in the guess_params function
-    ! call initial_guess
-    if (present(phi_init)) then
-       this%phi = phi_init
+    call get_grid(params,dim,len,w)  ! Fix to allow power mapping
+    
+    if ( prev_test(params,dim) ) then
+       xNew = chebyshev_grid(this%ord,len,w)  ! Fix this call for arbitrary grids
+       phi_prev = interpolate_instanton_(this,xNew)
+       call create_instanton_grid(this,grid_,len,w)
+       ! call create_instanton_grid(inst,grid_,len,w,1.)
+       this%phi(:) = phi_prev(:)
     else
+       call create_instanton_grid(this,grid_,len,w)
        call get_ic(params,dim,params_ic,prof_type)
        call profile_guess(this,params_ic(1),params_ic(2),params_ic(3),params_ic(4),prof_type)
+       !    call create_instanton_grid(this,grid_,len,w,1.)
     endif
-    
+
+    !call solve_profile(this,params)
     call create_solver(solv,n,maxit,kick)
-    call initialise_equations(this%tForm,params,dim,this%bc)
-    call solve(solv,this%phi)  
+    call initialise_equations(this%tForm,dim,this%bc)
+    call solve(solv,this%phi)
+    call delete_solver(solv)
     if (out_) call output_instanton(this)
   end subroutine compute_profile
-  
+
+  !>@brief
+  !> Given an instanton object with initialised collocation grid and initial guess, perform the Newton iterations.
+  !> The solver is created and destroyed in this subroutine, so if scans at fixed order are being performed, it is better to break up this subroutine and put it outside of the appropriate loops.
+  subroutine solve_profile(this,params)
+    type(Instanton), intent(inout) :: this
+    real(dl), dimension(:), intent(in) :: params
+
+    type(Solver) :: solv
+    integer, parameter :: maxit = 100; real(dl), parameter :: kick = 0.1_dl
+    
+    call create_solver(solv,this%ord+1,maxit,kick)
+    call initialise_equations(this%tForm,this%dim,this%bc)
+    call solve(solv,this%phi)
+    call delete_solver(solv)
+  end subroutine solve_profile
+!#endif
+
   !>@brief
   !> Compute the instanton solution for the symmetry breaking parameter delta
   !>
@@ -223,7 +266,6 @@ contains
     else
        call get_grid_params(params,dim,len,w)
     endif
-    print*,"grid params ",params(1),len,w
     call create_instanton_grid(this,'FULL_MID',len,w)
     ! Better IR behaviour for Fubini (add this functionality to new call)
     !call create_grid_stretch(this%tForm,order,len,20._dl)
@@ -233,13 +275,11 @@ contains
     else
        print*,"Making guess"
        call get_guess_params(params,dim,params_ic)
-       print*,params_ic
        call profile_guess(this,params_ic(1),params_ic(2),params_ic(3),params_ic(4),p_loc)
     endif
 
-    print*,"making solver"
     call create_solver(solv,n,100,0.1_dl)
-    call initialise_equations(this%tForm,params,dim,this%bc)
+    call initialise_equations(this%tForm,dim,this%bc)
     call solve(solv,this%phi)
 
     ! Add option to try a new profile if the solver doesn't converge
@@ -251,19 +291,58 @@ contains
     call delete_solver(solv)
   end subroutine compute_profile_
 
-  subroutine solve_profile(this,params)
+! Update this to take a grid parameter input
+  subroutine create_instanton_grid_(this,type,grid)
     type(Instanton), intent(inout) :: this
-    real(dl), dimension(1:nPar), intent(in) :: params
-    
-    type(Solver) :: solv
-    integer :: n
-    integer, parameter :: maxIt = 100
-    
-    n = this%ord+1
-    call create_solver(solv,n,maxIt,0.1_dl)
-    call initialise_equations(this%tForm,params,this%dim,this%bc) ! Need to pre call this one to simplify calling signature
-    call solve(solv,this%phi)
-  end subroutine solve_profile
+    character(8), intent(in) :: type
+    type(GridSpec), intent(in) :: grid
+
+    integer :: n_deriv
+    logical :: num_inv, rational
+
+    n_deriv = 2; num_inv = .false.
+    rational = .false.; if (grid%pow > 0.) rational = .true.
+
+    select case (type)
+    case ('FULL_MID')
+       this%bc = (/.false.,.false./)
+       call create_chebyshev_full(this%tForm,this%ord,n_deriv,'MIDS',num_inv)
+       call cluster_points(this%tForm,grid%scl,.false.)
+       call transform_to_evens(this%tForm)
+       if (rational) then
+          call transform_double_infinite_rational(this%tForm,grid%len,grid%pow)
+       else
+          call transform_double_infinite(this%tForm,grid%len)
+       endif
+       this%grid_type = 'FULL_MID'
+
+    case ('FULL_RHT')
+       this%bc = (/.false.,.true./)
+       call create_chebyshev_full(this%tForm,this%ord,n_deriv,'RGHT',num_inv)
+       call cluster_points(this%tForm,grid%scl,.false.)
+       call transform_to_evens(this%tForm)
+       if (rational) then
+          call transform_double_infinite_rational(this%tForm,grid%len,grid%pow)
+       else
+          call transform_double_infinite(this%tForm,grid%len)
+       endif
+       this%grid_type = 'FULL_RHT'
+
+       case ('HALF_END')
+          this%bc = (/.true.,.true./)
+          call create_chebyshev_full(this%tForm,this%ord,n_deriv,'ENDS',num_inv)
+          call cluster_points(this%tForm,grid%scl,.false.)
+          call transform_semi_infinite(this%tForm,grid%len)
+          this%grid_type = 'HALF_END'
+
+       case ('HALF_LFT')
+          this%bc = (/.true.,.true./)
+          call create_chebyshev_full(this%tForm,this%ord,n_deriv,'LEFT',num_inv)
+          call cluster_points(this%tForm,grid%scl,.false.)
+          call transform_semi_infinite(this%tForm,grid%len)
+          this%grid_type = 'HALF_LFT'
+    end select
+  end subroutine create_instanton_grid_
     
   subroutine create_instanton_grid(this,type,len,w,pow)
     type(Instanton), intent(inout) :: this
@@ -282,22 +361,24 @@ contains
     case ('FULL_MID') ! Gauss grid with even rationals on double infinite
        this%bc = (/.false.,.false./) 
        call create_chebyshev_full(this%tForm,this%ord,n_deriv,'MIDS',num_inv)
+       call cluster_points(this%tForm,w,.false.)
        call transform_to_evens(this%tForm)
-       call cluster_points(this%tForm,w,.true.)
        if (rational) then
           call transform_double_infinite_rational(this%tForm,len,pow)
           print*,"Warning, rational mapping not fully implemented for interpolation"
        else
           call transform_double_infinite(this%tForm,len)
-          this%grid_type = 'FULL_MID'
        endif
+       this%grid_type = 'FULL_MID'
        
     case ('FULL_RHT') ! Radau grid with even rationals on double infinite
        this%bc = (/.false.,.true./) 
        print*,"Warning, FULL_RHT not fully tested"
        call create_chebyshev_full(this%tForm,this%ord,n_deriv,'RGHT',num_inv)
+!       call transform_to_evens(this%tForm)
+!       call cluster_points(this%tForm,w,.true.)
+       call cluster_points(this%tForm,w,.false.)
        call transform_to_evens(this%tForm)
-       call cluster_points(this%tForm,w,.true.)
        if (rational) then
           call transform_double_infinite_rational(this%tForm,len,pow)
           print*,"Warning, rational mapping not fully implemented for interpolation"
@@ -320,6 +401,60 @@ contains
        call cluster_points(this%tForm,w,.false.)
        call transform_semi_infinite(this%tForm,len)
        this%grid_type = 'HALF_LFT'
+
+    case ('FULL_PRE')
+       this%bc = (/.false.,.false./)
+       call create_chebyshev_full(this%tForm,this%ord,n_deriv,'ENDS',num_inv)
+       call cluster_points(this%tForm,w,.false.)
+       call transform_to_evens(this%tForm)
+       call transform_double_infinite(this%tForm,len)
+       this%grid_type = 'FULL_PRE'
+
+    case ('RATI_MID')
+       this%bc = (/.false.,.false./)
+       print*,"Warning RATI_MID not fully tested"
+       call create_chebyshev_full(this%tForm,this%ord,n_deriv,'MIDS',num_inv)
+       call transform_to_evens(this%tForm)
+       call transform_double_infinite_rational(this%tForm,len,pow)
+       this%grid_type = 'RATI_MID'
+       
+    case ('RATI_RHT')
+       this%bc = (/.true.,.true./)
+       print*,"Warning RATI_RHT not fully tested"
+       call create_chebyshev_full(this%tForm,this%ord,n_deriv,'RGHT',num_inv)
+       call transform_to_evens(this%tForm)
+       call transform_double_infinite_rational(this%tForm,len,pow)
+       this%grid_type = 'RATI_RHT'
+       
+    case ('TANH_MID')
+       this%bc = (/.false.,.false./)
+       print*,"Warning TANH_MID not fully tested"
+       call create_chebyshev_full(this%tForm,this%ord,n_deriv,'MIDS',num_inv)
+       call transform_to_evens(this%tForm)
+       !call transform_tanh_infinite(this,len)
+       this%grid_type = 'TANH_MID'
+
+    case ('TANH_RHT')
+       this%bc = (/.false.,.true./)
+       print*,"Warning TANH_RHT not fully tested"
+       call create_chebyshev_full(this%tForm,this%ord,n_deriv,'MIDS',num_inv)
+       call transform_to_evens(this%tForm)
+       ! Finish filling this in
+       this%grid_type = 'TANH_RHT'
+
+    case ('IRST_MID')
+       this%bc = (/.false.,.false./)
+       print*,"Warning IRST_MID not fully tested"
+       call create_chebyshev_full(this%tForm,this%ord,n_deriv,'MIDS',num_inv)
+       ! Finish filling this in
+       this%grid_type = 'IRST_MID'
+
+    case ('IRST_RHT')
+       this%bc = (/.false.,.false./)
+       print*,"Warning IRST_RHT not fully tested"
+       call create_chebyshev_full(this%tForm,this%ord,n_deriv,'RGHT',num_inv)
+       ! Finish filling this in
+       this%grid_type = 'IRST_RHT'
        
     case default
        print*,"Invalid choice of collocation grid, defaulting to FULL_MID"
@@ -368,7 +503,7 @@ contains
        print*,"HALF_LFT interpolation not yet tested"
        
     case default
-       print*,"Warning, attempting to invert a nonexistant grid mapping"
+       print*,"Warning, inversion of specified grid mapping ",this%grid_type," not implemented"
     end select
   end subroutine invert_grid_mapping
   
@@ -429,7 +564,7 @@ contains
     real(dl), intent(in) :: x
     real(dl), intent(in) :: r0,m,phif,phit
     real(dl) :: f
-    f = (phif-phit)*(2._dl/pi)*atan(-0.5_dl*exp(m*r0)/cosh(m*x)) + phif
+    f = (phif-phit)*(2._dl/pi)*atan(-sinh(m*r0)/cosh(m*x)) + phif
   end function breather_p
 
   elemental function tanh_p(x,r0,m,phif,phit) result(f)
@@ -444,8 +579,6 @@ contains
     real(dl), intent(in) :: r0,m,phif,phit
     real(dl) :: f
 
-!    real(dl) :: mscl
-!    mscl = 1.5_dl*m
     f = (phif-phit)*(2._dl/pi)*atan(exp(m*(x-r0))) + phit
   end function atan_p
 
@@ -486,5 +619,24 @@ contains
 
     f(:) = (phif-phit)*(2._dl/pi)*atan(exp(0.5_dl*pi*m*(x(:)-r0))) + phit
   end subroutine atan_profile
+
+  !>@brief
+  !> Return the collocation grid for even Chebyshevs on the doubly-infinite interval with clustering.
+  !> Used by my scan program
+  function chebyshev_grid(order,L,w) result(xVals)
+    integer, intent(in) :: order
+    real(dl), intent(in) :: L,w
+    real(dl), dimension(0:order) :: xVals
+    integer :: i; real(dl) :: dkcol
+
+    ! Replace with a function call
+    dkcol = 0.5_dl*pi / dble(order+1)
+    do i=0,order
+       xVals(i) = -cos( dble(2*i+1)*dkcol )
+    enddo
+    xVals = sqrt(0.5_dl*xVals + 0.5_dl)
+    xVals = (1._dl/pi)*atan(w*tan(pi*(xVals-0.5_dl))) + 0.5_dl
+    xVals = L*xVals / sqrt(1._dl - xVals**2)
+  end function chebyshev_grid
   
 end module Instanton_Class

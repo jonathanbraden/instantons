@@ -220,8 +220,8 @@ contains
 #endif
 
     n = this%nVar
-    call variation(f_cur, this%L)
-    call source(f_cur, this%S)
+    call variation(f_cur, this%L)  ! pass this in
+    call source(f_cur, this%S)     ! pass this in
     
     res = sqrt(sum(this%S**2))  ! Current residual
     this%S_prev = this%S
@@ -263,54 +263,13 @@ contains
 #ifdef DEBUG_SOLVER
     print*,""
 #endif
-    this%f_prev = f_cur            ! Store previous iteration
+
+    this%f_prev = f_cur             ! Store previous iteration
     f_cur = f_cur + alpha*this%del  ! Update function
-    call source(f_cur, this%S)  ! This seems redundant with a call above
-    this%alpha = alpha          ! Store violation of the equation of motion
+    call source(f_cur, this%S)      ! This seems redundant with a call above
+    this%alpha = alpha              ! Store violation of the equation of motion
   end subroutine line_iteration
   
-  !>@brief
-  !> Nonlinear solver based on Newton's method, with the extension to consider
-  !> variable length paths along the Newton iteration to improve convergence properties.
-  !> This version requires as input a subroutine to fill the linear and source terms
-!  subroutine line_iteration(this, hessian, source)
-!    type(Solver), intent(inout) :: this
-!    procedure (lin), nopass :: hessian
-!    procedure (src), nopass :: source
-
-!    call eqn(this%L,this%S,phi_cur)
-!  end subroutine line_iteration
-
-  subroutine solve_radius(this,f_cur,tForm)
-    type(Solver), intent(inout) :: this
-    real(dl), dimension(:), intent(inout) :: f_cur
-    type(Chebyshev), intent(in) :: tForm
-    real(dl), dimension(:), allocatable :: f_prime
-
-    allocate(f_prime(1:size(f_cur)))
-    f_prime = matmul(tForm%derivs(:,:,1),f_cur)    
-  end subroutine solve_radius
-
-  !>@brief
-  !> Decompose the proposed perturbation to the field into eigenmodes of the linear operator.
-  !> In particular, exctract the dependence of the current derivative of the solution,
-  !> corresponding to the collective mode associated with the overall bubble radius
-  subroutine decompose_perturbation(this)
-    type(Solver), intent(in) :: this
-
-    ! 1. Compute derivative of the current solution
-    ! 2. Get the eigenmodes of the linear operator
-    ! 3. Decompose the source into the eigenmodes (find the weight for orthogonality)
-    ! 4. Figure out what these modes correspond to
-  end subroutine decompose_perturbation
-  
-  !>@brief
-  !> Look for solutions using combined Newton and gradient descent method
-  !> This will presumably be more robust, although somewhat slower.
-  subroutine levenberg_marquadt(this)
-    type(Solver), intent(in) :: this
-  end subroutine levenberg_marquadt
-
   !>@brief
   !> Look for solutions to the differential equation by performing a gradient flow.
   !>
