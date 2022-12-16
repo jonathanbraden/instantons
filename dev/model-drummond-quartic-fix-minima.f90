@@ -20,7 +20,7 @@ module Model
   implicit none
   private :: del, m2, lam, i_
 
-  integer, parameter :: nPar=1
+  integer, parameter :: nPar=2
   real(dl) :: del, m2, lam
   
   real(dl), parameter :: del_min = 0.5_dl
@@ -37,14 +37,15 @@ contains
   subroutine set_model_params(params,dim)
     real(dl), dimension(1:nPar), intent(in) :: params
     real(dl), intent(in) :: dim
-    del = 0.5_dl*1.2**2
-    m2 = params(1)
+    del = params(1)
+    m2 = params(2)
     lam = -m2/(0.5_dl*twopi)**2
   end subroutine set_model_params
 
   function get_model_params() result(params)
     real(dl), dimension(1:nPar) :: params
-    params(1) = m2
+    params(1) = del
+    params(2) = m2
   end function get_model_params
 
   subroutine write_model_header(fNum)
@@ -106,8 +107,8 @@ contains
     integer, intent(out), optional :: prof_type
 
     real(dl) :: delta, n_dim
-    !    delta = params(1); n_dim = dim
-    delta = del; n_dim = dim
+    
+    delta = params(1); n_dim = dim
     call bubble_parameters_nd_(delta,n_dim,params_ic(1),params_ic(2))
     call get_minima(params_ic(3),params_ic(4))
     if (present(prof_type)) then

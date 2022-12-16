@@ -9,10 +9,11 @@ module Instanton_Class
      type(Chebyshev) :: tForm
      integer :: nfld, ord
      real(dl), dimension(:,:), pointer :: phi
-     real(dl), dimesnion(:), allocatable, target :: phi_dat
+     real(dl), dimension(:), allocatable, target :: phi_dat
      integer :: dim
      real(dl) :: r0, meff, phif, phit
      logical :: exists = .false.
+     integer :: unit = -1
   end type Instanton_Multi
   
 contains
@@ -21,9 +22,10 @@ contains
     type(Instanton_multi), intent(out) :: this
     integer, intent(in) :: ord,d, nf
     this%dim = d; this%ord = ord; this%nfld = nf
-    if (allocated(this%phi)) deallocate(this%phi) ! Remove this to only allocate if size has changed
+    if (allocated(this%phi)) deallocate(this%phi)
     allocate(this%phi(0:ord,1:nf))  ! This is the wrong way
     this%exists = .true.
+    !! this%unit=56  ! Do I need this?
   end subroutine create_instanton_multi
 
   subroutine destroy_instanton_multi(this)
@@ -31,8 +33,9 @@ contains
     if (.not.this%exists) return
     deallocate(this%phi)
     this%exists = .false.
-  end subroutine destroy_instanton_mulit
-  
+    this%unit = -1
+  end subroutine destroy_instanton_multi
+
   function interpolate_instanton_(this,r_new) result(f_int)
     type(Instanton), intent(in) :: this
     real(dl), dimension(:), intent(in) :: r_new

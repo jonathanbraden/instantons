@@ -41,7 +41,7 @@ contains
   function get_model_params() result(params)
     real(dl), dimension(1:nPar) :: params
     params(1) = del
-  end function get_model_paramsu
+  end function get_model_params
   
   subroutine get_minima(phif,phit)
     real(dl), intent(out) :: phif, phit
@@ -71,15 +71,15 @@ contains
     real(dl), intent(in) :: dim
     real(dl), intent(out) :: len, scl
 
-    real(dl), parameter :: wscl = 0.5_dl*twopi !6.3*1.74
+    real(dl), parameter :: W_SCL = 0.5_dl*twopi !6.3*1.74
     real(dl) :: meff_max, r0, w0, delta
     real(dl) :: rad_scl
     
-    delta = params(1); rad_fac = 1._dl !sqrt(3._dl)
+    delta = params(1); rad_scl = 1._dl !sqrt(3._dl)
     call bubble_parameters_nd_(delta,dim,r0,meff_max)
     len = r0*rad_scl
     w0 = 1._dl/meff_max
-    scl = wscl * (w0/len) ! Change to (w0/len) and adjust wscl
+    scl = W_SCL * (w0/len) ! Change to (w0/len) and adjust wscl
     if (w0 > r0) then
        len = rad_scl*w0
        scl = 1._dl

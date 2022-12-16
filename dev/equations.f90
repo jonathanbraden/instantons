@@ -27,16 +27,12 @@ contains
     bc = bc_
   end subroutine set_bc
   
-  subroutine initialise_equations(tForm, params, dim, bc_)
+  subroutine initialise_equations(tForm, dim, bc_)
     type(Chebyshev), intent(in) :: tForm
-    real(dl), dimension(:), intent(in) :: params
     real(dl), intent(in) :: dim
     logical, dimension(1:2), intent(in), optional :: bc_
     integer :: i, sz, imin
-
-    ! This line is awful, set it somewhere else
-    ! call set_model_params(params,dim)  Moved into compute_profile_
-    
+ 
     sz = size(tForm%xGrid)
     if (allocated(L0)) deallocate(L0); allocate( L0(1:sz,1:sz) )
     if (allocated(neumann)) deallocate(neumann); allocate( neumann(1:sz) )

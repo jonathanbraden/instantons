@@ -27,11 +27,13 @@ program Instanton_Solve
 !  delta = 0.5_dl
 !  r0 = 1.5_dl*2._dl**0.5/delta; w0=2.**0.5
 !  phif=-1.; phit=1.
-  
-  dim = 1
-  nDel = 55; allocate(deltas(1:nDel))
-  deltas = 0.5_dl + 10.**([ (-7.+0.2*(i-1), i=size(deltas),1,-1) ])
 
+! For Drummond
+!  dim = 2
+!  nDel = 55; allocate(deltas(1:nDel))
+!  deltas = 0.5_dl + 10.**([ (-7.+0.2*(i-1), i=size(deltas),1,-1) ])
+
+  
   ! For BEC paper
 !  nDel = 6; allocate(deltas(1:nDel))
 !  deltas = 0.5_dl*([ 1.2, 1.3, 1.4, 1.5, 1.55, 1.6 ])**2
@@ -57,7 +59,7 @@ program Instanton_Solve
   enddo
   close(u)
     
-  call scan_profiles(deltas,dim,200)
+!  call scan_profiles(deltas,dim,200)
   
 contains
 

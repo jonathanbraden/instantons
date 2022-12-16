@@ -10,9 +10,9 @@
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 ! Preprocessors for inlining.  Could also move this to another file
-#define POTENTIAL(f) (0.5_dl*( sin(f)**2 + (1._dl/del)*cos(f) - 1._dl ))
-#define VPRIME(f) (0.5_dl*( sin(2._dl*f) - (1._dl/del)*sin(f) ))
-#define VDPRIME(f) (0.5_dl*( 2._dl*cos(2._dl*f) - (1._dl/del)*cos(f) ))
+#define POTENTIAL(f) ( 0.5_dl*( sin(f)**2 + (1._dl/del)*(cos(f)-1._dl)) )
+#define VPRIME(f) ( 0.5_dl*( sin(2._dl*f) - (1._dl/del)*sin(f)) )
+#define VDPRIME(f) ( 0.5_dl*( 2._dl*cos(2._dl*f) - (1._dl/del)*cos(f)) )
 
 module Model
   use constants

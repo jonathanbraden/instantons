@@ -35,47 +35,69 @@ program Instanton_Solver
   integer, dimension(1) :: i1
 
   real(dl), dimension(1:101) :: del_vals_
-  integer, parameter :: n_params = 51 ! 5001  ! adjust this
-  real(dl), dimension(1:nPar,1:n_params) :: param_vals
-  real(dl), dimension(:,:), allocatable :: params
+  integer :: n_params
+  real(dl), dimension(:,:), allocatable :: params, param_vals
   real(dl) :: drho
-  
  
   integer :: i_, istart
 
-  ! This is for strict Drummond model
-  !param_vals = 0.5*1.2_dl**2
-  ! call scan_profiles(param_vals(:1,:2),1.,100,get_grid_params,get_guess_params,use_previous,out=.true.)
-  ! param_vals(1,1) = 2._dl; param_vals(2,1) = -2._dl; param_vals(3,1) = 0._dl
+#ifdef COSINE
+  allocate(param_vals(1:nPar,5))
+  param_vals(3,:) = 0._dl
+  param_vals(1,:) = 1._dl
+  param_vals(2,1) = -0.25*10.**2
+  param_vals(2,2) = -0.25*5.**2
+  param_vals(2,3) = -0.25*4.**2
+  param_vals(2,4) = -0.25*3.**2
+  param_vals(2,5) = -0.25*2.**2
+  call scan_profiles(param_vals,1.,100,get_grid_params,get_guess_params,use_previous,out=.true.)
+#endif
 
-  ! testing lambda = 1.2 sims
-  !param_vals(1,:) = 1._dl; param_vals(2,:) = -0.25*1.2**2; param_vals(3,:) = 0.
-  !call scan_profiles(param_vals(:,:2),1.,100,get_grid_params,get_guess_params,use_previous,out=.true.)
+!#ifdef DRUMMOND
+  allocate(param_vals(1:nPar,8))
+  param_vals(1,1) = 0.5_dl*10.**2
+  param_vals(1,2) = 0.5_dl*5.**2
+  param_vals(1,3) = 0.5_dl*4.**2
+  param_vals(1,4) = 0.5_dl*3.**2
+  param_vals(1,5) = 0.5_dl*2.**2
+  param_vals(1,6) = 0.5_dl*1.5**2
+  param_vals(1,7) = 0.5_dl*1.2**2
+  param_vals(1,8) = 0.5_dl*1.15**2
+  call scan_profiles(param_vals,1.,100,get_grid_params,get_guess_params,use_previous,out=.true.)
+!#endif
   
-  ! Only for log-potential, comment if not using it
-!  real(dl), dimension(1:nEps+nEPS_r) :: epsScan
-!  epsScan(1:nEps) = scanVals(:); epsScan(nEps+1:nEps+nEps_r) = scanVals_r(:)
+  ! Scanning of log-potential
+  !allocate(param_vals(1:nPar,1:(nEps_r+nEps)))
+  !param_vals(1,1:nEps) = scanVals(:); param_vals(1,nEps+1:) = scanVals_r(:)
+  !call scan_profiles(param_vals,1.,100,get_grid_params,get_guess_params,use_previous,out=.true.)
 
+#ifdef RG_PAPER 
 !  call scan_s2_bec_vals(1.2,0.99,101,del_vals_)
 !  call read_param_file('eff_params_l1.2.txt',params,4)
-  
-!  call read_param_file('eff_params_cosine_l1.2.txt',params,8)
+
+  ! This stuff is for the RG correction paper
+  !call read_param_file('params_l2.txt',params,8,n_head=4)
+  !call read_param_file('eff_params_cosine_l1.2.txt',params,8,n_head=4)
   !  call read_param_file('eff_params_cosine.txt',params,8)
   call read_param_file('params.txt',params,8,n_head=4)
-  istart = 0
+  n_params = size(params,dim=2)
+  allocate(param_vals(1:3,1:n_params))
+  param_vals = 0.
   do i_ = 1,n_params
-     !call convert_masses_to_model(params(5,istart+i_),params(6,istart+i_),param_vals(:,i_)) ! 2 term version
-     drho=0.25
-     call convert_masses_and_rho_to_model(params(5,istart+i_),params(6,istart+i_),drho,param_vals(:,i_)) ! 3 term fixed rho version
+     !call convert_masses_to_model(params(5,istart+i_),params(6,istart+i_),param_vals(:2,i_)) ! 2 term version
+     drho=1.75
+     call convert_masses_and_rho_to_model(params(5,i_),params(6,i_),drho,param_vals(:,i_)) ! 3 term fixed rho version
      !param_vals(1,i_) = exp(-0.5*params(7,i_)); param_vals(3,i_) = 0.; param_vals(2,i_) = -0.25*2._dl**2*exp(-2.*params(7,i_))
   enddo
-  call scan_profiles(param_vals(:,:),1.,100,get_grid_params,get_guess_params,use_previous,out=.true.)
-  ! Using lambda-effective in Gaussian resum
-  !param_vals(1,:) = 0.5_dl*params(4,:)
+  call scan_profiles(param_vals(:,:),3.,100,get_grid_params,get_guess_params,use_previous,out=.false.)
+  call scan_eigens(param_vals(:,:),1.,100,get_grid_params,get_guess_params,use_previous)
 
   
-!  call scan_profiles(param_vals(:,:1),1.,100,get_grid_params,get_guess_params,use_previous,out=.true.)
-  
+  call create_instanton(inst,100,2.)
+  param_vals(1,1) = 1._dl; param_vals(2,1) = -0.25*2.**2; param_vals(3,1) = 0._dl
+  call compute_profile(inst,param_vals(:,1),get_grid_params,get_guess_params,use_previous,grid_type='FULL_MID',out=.true.)
+  ! Using lambda-effective in Gaussian resum
+    
   !call scan_profiles(sigVals,1.,100,get_grid_params,get_guess_params,use_previous,grid_type='FULL_MID',out=.true.)
   
 !  call compute_profile(inst,(/0.09_dl/),get_grid_params,get_guess_params,use_previous,grid_type='FULL_MID',out=.true.)
@@ -88,11 +110,9 @@ program Instanton_Solver
 !  call compute_profile_(inst,(/0.001/),out=.true.,p_i=2)    ! Cubic double well
 !  call compute_profile_(inst,(/ 1.+1.e1 /),out=.true.,p_i=5)    ! Fubini Potential
 !  call compute_profile_(inst,(/ 1.5 /),out=.true.,p_i=4)  ! Logarithmic potential
-
+#endif
+  
 #ifdef MORE
-  call compute_profile_(inst,(/ 0.5*1.5_dl**2 /),out=.true.,p_i=3)
-  call compute_profile_(inst,(/ 0.5*1.6_dl**2 /),out=.true.,p_i=3)
-  call compute_profile_(inst,(/ 0.5*6._dl**2 /),out=.true.,p_i=3)
 !  call interp_uniform(inst,256,50.*2.**0.5)
 !  call interp_simulation(inst,2048,16._dl*4.)
   
@@ -134,6 +154,104 @@ program Instanton_Solver
   
 contains
 
+  ! The new call has more flexibility, so I should just delete this one
+  subroutine scan_eigens_old(par,ord,dim)
+    real(dl), dimension(:), intent(in) :: par
+    integer, intent(in) :: ord
+    real(dl), intent(in) :: dim
+    
+    type(Instanton) :: inst
+    integer :: i,j
+    integer :: u1, u2, u3
+    real(dl), dimension(0:ord) :: ev_i, ev_r
+    real(dl), dimension(0:ord,0:ord) :: v_r
+    integer, dimension(1) :: ev_ind
+    real(dl) :: mv
+    
+    open(unit=newunit(u1),file='eigenvalues.dat')
+    open(unit=newunit(u2),file='eigenvectors.dat')
+    open(unit=newunit(u3),file='actions.dat')
+    
+    call create_instanton(inst,ord,dim)
+    do i=1,size(par)
+       call compute_profile_(inst,(/ par(i) /),out=.false.,p_i=3)
+       write(u3,*) compute_action(inst)
+       call get_eigenvectors(inst,ev_r,ev_i,v_r,0,(/.true.,.true./))
+       mv = minval(ev_r); ev_ind = minloc(ev_r)
+       ev_r(ev_ind(1)-1) = 1.e8
+       write(u1,*) par(i), mv, minval(ev_r)
+       do j=0,ord
+          write(u2,*) inst%tForm%xGrid(j), v_r(j,ev_ind(1)-1)
+       enddo
+       write(u2,*) ""
+    enddo
+  end subroutine scan_eigens_old
+  
+  subroutine scan_eigens(param_grid, dim, ord, get_grid, get_ic_params, prev_test, grid_type)
+    real(dl), dimension(:,:), intent(in) :: param_grid
+    real(dl), intent(in) :: dim
+    integer, intent(in) :: ord
+    procedure(get_grid_params)  :: get_grid
+    procedure(get_guess_params) :: get_ic_params
+    procedure(use_previous)     :: prev_test
+    character(8), intent(in), optional :: grid_type
+
+    real(dl), dimension(0:ord,0:ord) :: v_r
+    real(dl), dimension(0:ord) :: ev_r, ev_i
+    real(dl), dimension(0:ord) :: xNew, phi_prev    
+    real(dl) :: par_cur(1:nPar)
+    real(dl), dimension(1:4) :: params_ic
+    real(dl) :: len, w
+    real(dl) :: ev_min, evec_min(0:ord)
+    integer :: ev_min_ind
+    integer :: fNum_eval, fNum_evec
+    integer :: p_i
+    integer :: i,j
+    character(8) :: grid_
+    type(Instanton) :: inst
+    type(Solver) :: solv
+
+    grid_ = 'FULL_MID'; if (present(grid_type)) grid_ = grid_type
+    open(unit=newunit(fNum_eval),file='lowest-eigens.dat')
+    open(unit=newunit(fNum_evec),file='lowest-eigenmodes.dat')
+    
+    call create_instanton(inst,ord,dim)
+    call create_solver(solv,ord+1,100,0.1_dl)
+
+    do i=1,size(param_grid(1,:))
+       par_cur = param_grid(:,i)
+       call set_model_params(par_cur,dim)
+
+       call get_grid(get_model_params(), dim, len, w)
+       call get_ic_params(get_model_params(), dim, params_ic, p_i)
+
+       if ( prev_test( get_model_params(),dim ) .and. i.ne.1 ) then
+          xNew = chebyshev_grid(inst%ord,len,w)
+          phi_prev = interpolate_instanton_(inst,xNew)
+          call create_instanton_grid(inst,grid_,len,w)
+          inst%phi(:) = phi_prev(:)
+          print*,par_cur,"interpolate"
+       else
+          call create_instanton_grid(inst,grid_,len,w)
+          call profile_guess(inst,params_ic(1),params_ic(2),params_ic(3),params_ic(4),p_i)
+       endif
+
+       call initialise_equations(inst%tForm,dim,inst%bc)
+       call solve(solv,inst%phi)
+
+       call get_eigenvectors(inst,ev_r,ev_i,v_r,0,(/.true.,.true./))
+       ev_min = minval(ev_r); ev_min_ind = minloc(ev_r,dim=1)
+       ev_r(ev_min_ind-1) = 1.e8
+       write(fNum_eval,*) par_cur, ev_min, minval(ev_r)
+       do j=0,ord
+          write(fNum_evec,*) inst%tForm%xGrid(j), v_r(j,ev_min_ind-1)
+       enddo
+       write(fNum_evec,*) ""
+    enddo
+    close(fNum_eval); close(fNum_evec)
+    call delete_solver(solv); call destroy_instanton(inst)
+  end subroutine scan_eigens
+  
   subroutine read_param_file(fName, params,line_length,n_head)
     character(*), intent(in) :: fName
     real(dl), dimension(:,:), allocatable, intent(out) :: params
@@ -193,19 +311,24 @@ contains
     procedure(get_grid_params) :: get_grid
     procedure(get_guess_params) :: get_ic_params
     procedure(use_previous) :: prev_test
-    
+
+    logical :: out_inst
     integer :: i
     real(dl) :: dim
     character(6) :: dimStr; character(3) :: ordStr
 
+    out_inst = .false.
+    
     do i=0,30
        dim = 0.5+i*0.1
        write(dimStr,'(A1,F3.1,A1)') '-',dim,'d'
        write(ordStr,'(I3)') ord
 
-       call scan_profiles(scanParams,dim,ord,get_grid,get_ic_params,prev_test,out=.false.)
+       call scan_profiles(scanParams, dim, ord, get_grid, get_ic_params, prev_test, out=out_inst)
        call execute_command_line('mv actions.dat actions-'//trim(adjustl(modName))//trim(adjustl(dimStr))//'-o'//trim(adjustl(ordStr))//'.dat')
-       !call execute_command_line('mv instantons.dat instantons-'//trim(adjustl(modName))//trim(adjustl(dimStr))//'-o'//trim(adjustl(ordStr))//'.dat')
+       if (out_inst) then
+          call execute_command_line('mv instantons.dat instantons-'//trim(adjustl(modName))//trim(adjustl(dimStr))//'-o'//trim(adjustl(ordStr))//'.dat')
+       endif
     enddo
   end subroutine scan_dimensions
 
@@ -280,12 +403,14 @@ contains
 
     do i=1,size(param_grid(1,:))
        par_cur = param_grid(:,i)
+       print*,"params are ",par_cur
        call set_model_params(par_cur,dim)
 
        ! Check if I can comment these things
        !call get_grid( (/dCur/),dim,len,w,pow )  ! Where is this pow thing defined?  Only for some models?
        call get_grid(get_model_params(),dim,len,w)
        call get_ic_params(get_model_params(),dim,params_ic,p_i)
+       print*,"len = ",len," width = ",w
        
        ! This is where I decide whether or not to use the previous solution
        ! TO DO: Fix the ugly call to get the new chebyshev grid
@@ -308,7 +433,7 @@ contains
        ! Now solve
        call solve(solv,inst%phi)
 
-       write(fNum,*) par_cur, compute_action(inst), interpolate_instanton_(inst,(/0._dl/)), inst%phi(0), 1./sqrt(abs(phi_prev(0))), sqrt(maxval(abs(phi_prev))), len, 1./w
+       write(fNum,*) par_cur, compute_action(inst), interpolate_instanton_(inst,(/0._dl/)), inst%phi(0), 1./sqrt(abs(phi_prev(0))), sqrt(maxval(abs(phi_prev))), len, 1./w, inst%phi(ord)
        if (outL) call output_instanton(inst)
     enddo
 
@@ -403,39 +528,7 @@ contains
        L_lin(i,i) = L_lin(i,i) - m2eff
     enddo
   end subroutine linear_operator
-  
-  subroutine scan_eigens(par,ord,dim)
-    real(dl), dimension(:), intent(in) :: par
-    integer, intent(in) :: ord
-    real(dl), intent(in) :: dim
     
-    type(Instanton) :: inst
-    integer :: i,j
-    integer :: u1, u2, u3
-    real(dl), dimension(0:ord) :: ev_i, ev_r
-    real(dl), dimension(0:ord,0:ord) :: v_r
-    integer, dimension(1) :: ev_ind
-    real(dl) :: mv
-    
-    open(unit=newunit(u1),file='eigenvalues.dat')
-    open(unit=newunit(u2),file='eigenvectors.dat')
-    open(unit=newunit(u3),file='actions.dat')
-    
-    call create_instanton(inst,ord,dim)
-    do i=1,size(par)
-       call compute_profile_(inst,(/ par(i) /),out=.false.,p_i=3)
-       write(u3,*) compute_action(inst)
-       call get_eigenvectors(inst,ev_r,ev_i,v_r,0,(/.true.,.true./))
-       mv = minval(ev_r); ev_ind = minloc(ev_r)
-       ev_r(ev_ind(1)-1) = 1.e8
-       write(u1,*) par(i), mv, minval(ev_r)
-       do j=0,ord
-          write(u2,*) inst%tForm%xGrid(j), v_r(j,ev_ind(1)-1)
-       enddo
-       write(u2,*) ""
-    enddo
-  end subroutine scan_eigens
-  
   !>@brief
   !> Interpolate the instanton profile onto a uniform grid fo
   !>

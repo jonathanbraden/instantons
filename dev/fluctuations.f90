@@ -8,10 +8,8 @@ module Fluctuations
 !  real(dl), dimension(:), allocatable :: work
 !  real(dl), dimension(:), allocatable :: evalreal, evalimag
 !  integer :: asize, ierror, iwork
-!  real(dl) :: dummy(1:1)
+!  real(dl) :: dummy(1:1)  
 
-  ! Create an appropriate type here
-  
 contains
 
   subroutine write_eigenvalues(ev_r,ev_i)
@@ -48,7 +46,7 @@ contains
   !> Compute the eigenvalues for spherical harmonic l around the instanton profile
   subroutine get_eigenvalues(this,ev_r,ev_i,l,out)
     type(Instanton), intent(in) :: this
-    real(dl), dimension(:), intent(out) :: ev_r,ev_i
+    real(dl), dimension(1:this%ord+1), intent(out) :: ev_r,ev_i
     integer, intent(in) :: l
     logical, intent(in), optional :: out
 
@@ -112,10 +110,14 @@ contains
     if (out_(2)) call write_eigenvectors(evec,this%tForm%xGrid)
   end subroutine get_eigenvectors
 
+!!!!!
+!!!!  Update this now that I've included the boundary conditions in the definition of the grid
+!!!!!
   subroutine fluc_op(this,op,l,d)
     type(Instanton), intent(in) :: this
     real(dl), dimension(0:this%ord,0:this%ord), intent(out) :: op
-    integer, intent(in) :: l,d
+    integer, intent(in) :: l
+    real(dl), intent(in) :: d  ! Do I actually use this?
     real(dl) :: norm; integer :: i
 
     norm = l*(l+this%dim-1._dl)
