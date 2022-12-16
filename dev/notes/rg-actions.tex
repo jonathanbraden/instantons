@@ -1,0 +1,45 @@
+\documentclass{revtex4}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+
+\begin{document}
+
+If we assume $\langle\delta\phi^2\rangle$ is independent of $\bar{\phi}$, and that the fluctuations are Gaussian, then the effective potential (including the first two orders in $\sigma^2\equiv\langle\delta\phi^2\rangle$) is
+\begin{equation}
+  \frac{V_{\rm eff}}{m^2\phi_0^2} = \cos\left(\frac{\phi}{\phi_0}\right) + \frac{\lambda^2}{2}\sin^2\left(\frac{\phi}{\phi_0}\right) + \frac{\sigma^2}{2\phi_0^2}\left[\lambda^2\cos\left(2\frac{\phi}{\phi_0}\right) - \cos\left(\frac{\phi}{\phi_0}\right)\right] - \frac{\sigma^4}{8\phi_0^4}\left[4\lambda^2\cos\left(2\frac{\phi}{\phi_0}\right) - \cos\left(\frac{\phi}{\phi_0}\right)\right] \, ,
+\end{equation}
+where we have introduced
+\begin{equation}
+  \sigma^2 \equiv \langle\delta\phi^2\rangle \, .
+\end{equation}
+This expression neglects the dependence of $\sigma^2$ on the mean field $\bar{\phi}$, as well as nonGaussian contributions to the moments $\langle\delta\phi^n\rangle$.  Specifically, we have assumed $\langle\delta\phi^4\rangle = 3\sigma^4$.
+The effective mass squared at the false vacuum $\phi = 0$ is given by
+\begin{equation}
+  \frac{V''(\phi_{\rm FV})}{m^2} \equiv \frac{m^2_{\rm FV, eff}}{m^2} = \lambda^2-1 - \frac{\sigma^2}{2\phi_0^2}\left(4\lambda^2-1\right) + \frac{\sigma^4}{8\phi_0^4}\left(16\lambda^2-1\right) \, .
+\end{equation}
+Similarly, we have
+\begin{equation}
+  \frac{\phi_0^2}{m^2}V^{\rm (4)}(\phi_{\rm FV}) = (1-4\lambda^2) + \frac{\sigma^2}{2\phi_0^2}\left(16\lambda^2-1\right) - \frac{\sigma^4}{8\phi_0^4}\left(64\lambda^2-1\right) \, .
+\end{equation}
+
+Let's now approximate the field fluctuations corresponding to the quadratic approximation around the false vacuum minimum, with UV and IR cutoffs $k_{\rm UV}$ and $k_{\rm IR}$, respectively.
+Taking $\sigma^2$ to be the ensemble averaged field variance assuming vacuum fluctuations with mass squared given by $m^2_{\rm FV, bare} = m^2(\lambda^2-1)$, we have
+\begin{equation}
+  \sigma^2 = \frac{1}{4\pi}\left(\sinh^{-1}\left(\frac{k_{\rm UV}}{m_{\rm FV, bare}}\right) - \sinh^{-1}\left(\frac{k_{\rm IR}}{m_{\rm FV, bare}}\right) \right) \approx \frac{1}{8\pi}\ln\left(\frac{4k_{\rm UV}^2}{m^2_{\rm FV, bare}}\right)
+\end{equation}
+This approximation of course neglects any distortion of the vacuum that may occur due to the presence of the UV modes, as well as the aforementioned deformation of the vacuum as the mean field is varied.
+
+Instead of expanding in periodic modes, a common expansion instead expands the potential corrections in polynomials.
+In the case of an angular field variable, this is clearly suboptimal.
+However, it does provide a useful way to parameterise how sensitive our results are to additional corrections to the potential.
+Therefore, we will also consider potential corrections
+\begin{equation}
+  \frac{\Delta V}{m^2\phi_0^2} = \frac{1}{2}\frac{\Delta m^2_{\rm eff}}{m^2}\frac{\phi^2}{\phi_0^2} + \frac{\Delta\lambda}{4}\frac{\phi^4}{\phi_0^4}
+\end{equation}
+with
+\begin{align}
+  \frac{\Delta m^2_{\rm eff}}{m^2} &= -\frac{\sigma^2}{2\phi_0^2}(4\lambda^2-1) + \frac{\sigma^4}{8\phi_0^4}(16\lambda^2-1) \\
+  \Delta\lambda &= \frac{\sigma^2}{12\phi_0^2}(16\lambda^2-1) - \frac{\sigma^4}{48\phi_0^4}(64\lambda^2-1)
+\end{align}
+
+\end{document}
